@@ -4,6 +4,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { MapIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { useItinerary } from "@/contexts/ItineraryContext";
+import { convertItineraryToEditorData } from "@/app/create-itinerary/utils/editorConverter";
 
 // Import from feature structure
 const ItineraryEditor = dynamic(
@@ -44,9 +47,37 @@ const ItineraryMap = dynamic(
 );
 
 export default function ItineraryPlanner() {
+  const router = useRouter();
+  const { state } = useItinerary();
   const [editorData, setEditorData] = useState<EditorData | undefined>();
   const [directionsData, setDirectionsData] = useState<any[]>([]);
   const editorRefreshFnRef = useRef<(() => Promise<any>) | null>(null);
+
+  // Redirect to create-itinerary if no itinerary exists
+  useEffect(() => {
+    if (!state.currentItinerary && !state.editorData) {
+      console.log("📝 No itinerary found, redirecting to create-itinerary");
+      router.push("/create-itinerary");
+      return;
+    }
+  }, [state.currentItinerary, state.editorData, router]);
+
+  // Load editor data from context whenever it changes
+  useEffect(() => {
+    if (state.editorData) {
+      console.log("📝 Loading itinerary from context:", state.editorData);
+      setEditorData(state.editorData);
+    }
+  }, [state.editorData]);
+
+  // Convert currentItinerary to editorData if we have itinerary but no editorData
+  useEffect(() => {
+    if (state.currentItinerary && !state.editorData) {
+      console.log("📝 Converting current itinerary to editor data");
+      const editorData = convertItineraryToEditorData(state.currentItinerary);
+      setEditorData(editorData);
+    }
+  }, [state.currentItinerary, state.editorData]);
 
   // Log editor data changes for debugging
   useEffect(() => {
@@ -104,6 +135,29 @@ export default function ItineraryPlanner() {
   }, []);
 
   console.log("ItineraryPlanner: Component rendering");
+  console.log("🔍 Debug state:", {
+    hasCurrentItinerary: !!state.currentItinerary,
+    hasEditorData: !!state.editorData,
+    localEditorData: !!editorData,
+    editorDataBlocks: editorData?.blocks?.length || 0,
+  });
+  console.log(
+    "🔍 Full editorData being passed to ItineraryEditor:",
+    editorData
+  );
+
+  // Show loading state while redirecting or if no itinerary
+  if (!state.currentItinerary && !state.editorData && !editorData) {
+    console.log("📝 No data found anywhere, redirecting...");
+    return (
+      <div className="h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-slate-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-2 overflow-hidden">
@@ -123,7 +177,11 @@ export default function ItineraryPlanner() {
                   data={editorData}
                   onChange={handleEditorChange}
                   onRefreshReady={handleRefreshReady}
-                  placeholder="Start planning your itinerary..."
+                  placeholder={
+                    editorData
+                      ? "Your itinerary is loading..."
+                      : "Start planning your itinerary..."
+                  }
                 />
               </div>
             </div>

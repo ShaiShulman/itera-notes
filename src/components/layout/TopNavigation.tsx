@@ -13,8 +13,8 @@ import {
 
 const navigationItems = [
   {
-    name: "New Itinerary",
-    href: "/new-itinerary",
+    name: "Create Itinerary",
+    href: "/create-itinerary",
     icon: PlusIcon,
     primary: true,
   },

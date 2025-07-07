@@ -73,7 +73,7 @@ export interface PlaceBlockData {
   notes?: string;
   description?: string;
   thumbnailUrl?: string;
-  status?: "idle" | "loading" | "found" | "error";
+  status?: "idle" | "loading" | "found" | "error" | "free-text";
   drivingTimeFromPrevious?: number;
   drivingDistanceFromPrevious?: number;
 }
@@ -95,7 +95,7 @@ export interface ItineraryEditorProps {
   onChange?: (data: EditorData) => void;
   onRefreshReady?: (
     refreshFn: () => Promise<{
-      directions: any[];
+      directions: unknown[];
       updatedPlaces: PlaceBlockData[];
     }>
   ) => void;
