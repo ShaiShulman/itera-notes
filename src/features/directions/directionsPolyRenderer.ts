@@ -5,11 +5,13 @@ interface PolylineRenderResult {
   dayIndex: number;
   color: string;
   pointCount: number;
+  isFallbackStraightLine?: boolean;
 }
 
 /**
  * Renders directions as polylines on a Google Map
  * Extracts encoded polylines from directions data and draws them as native polylines
+ * Also handles fallback straight-line connections when no driving route is available
  */
 export class DirectionsPolyRenderer {
   private map: google.maps.Map;
@@ -31,6 +33,27 @@ export class DirectionsPolyRenderer {
   }
 
   /**
+   * Parse coordinates from fallback straight-line response
+   * @param polylinePoints String containing coordinates in format "lat1,lng1|lat2,lng2|..."
+   * @returns Array of LatLng objects
+   */
+  private parseStraightLineCoordinates(
+    polylinePoints: string
+  ): google.maps.LatLng[] {
+    try {
+      const coordinates = polylinePoints.split("|").map((coord) => {
+        const [lat, lng] = coord.split(",").map(Number);
+        return new google.maps.LatLng(lat, lng);
+      });
+      console.log(`🔧 Parsed ${coordinates.length} straight-line coordinates`);
+      return coordinates;
+    } catch (error) {
+      console.error("❌ Error parsing straight-line coordinates:", error);
+      return [];
+    }
+  }
+
+  /**
    * Render directions data as polylines
    * @param directionsData Array of directions data for each day
    * @returns Array of rendered polyline results
@@ -49,7 +72,7 @@ export class DirectionsPolyRenderer {
           directionData.directionsResult
         );
 
-        // Extract encoded polyline from the first route
+        // Extract routes from the directions result
         const routes = directionData.directionsResult.routes;
         if (!routes || routes.length === 0) {
           console.warn(
@@ -66,30 +89,76 @@ export class DirectionsPolyRenderer {
           return;
         }
 
+        let decodedPath: google.maps.LatLng[] = [];
+        const isFallbackStraightLine =
+          directionData.directionsResult.isFallbackStraightLine;
+
+        if (isFallbackStraightLine) {
+          console.log(
+            `🔧 Using straight-line fallback for Day ${
+              directionData.dayIndex + 1
+            }`
+          );
+
+          // Parse coordinates from the special format for straight lines
+          decodedPath = this.parseStraightLineCoordinates(
+            overviewPolyline.points
+          );
+
+          if (decodedPath.length === 0) {
+            console.warn(
+              `⚠️ Could not parse straight-line coordinates for day ${
+                directionData.dayIndex + 1
+              }`
+            );
+            return;
+          }
+        } else {
+          console.log(
+            `🔧 Extracting encoded polyline for Day ${
+              directionData.dayIndex + 1
+            }:`,
+            overviewPolyline.points.substring(0, 50) + "..." // Log first 50 chars
+          );
+
+          // Decode the polyline using Google Maps geometry library
+          decodedPath = google.maps.geometry.encoding.decodePath(
+            overviewPolyline.points
+          );
+        }
+
         console.log(
-          `🔧 Extracting polyline for Day ${directionData.dayIndex + 1}:`,
-          overviewPolyline.points.substring(0, 50) + "..." // Log first 50 chars
+          `🔧 ${isFallbackStraightLine ? "Created" : "Decoded"} ${
+            decodedPath.length
+          } polyline points for Day ${directionData.dayIndex + 1}`
         );
 
-        // Decode the polyline using Google Maps geometry library
-        const decodedPath = google.maps.geometry.encoding.decodePath(
-          overviewPolyline.points
-        );
-
-        console.log(
-          `🔧 Decoded ${decodedPath.length} polyline points for Day ${
-            directionData.dayIndex + 1
-          }`
-        );
-
-        // Create a polyline with the decoded path
-        const polyline = new google.maps.Polyline({
+        // Create a polyline with the decoded/parsed path
+        const polylineOptions: google.maps.PolylineOptions = {
           path: decodedPath,
-          geodesic: true,
+          geodesic: !isFallbackStraightLine, // Use geodesic for real routes, straight lines for fallback
           strokeColor: directionData.color,
           strokeOpacity: 0.8,
           strokeWeight: 4,
-        });
+        };
+
+        // Use dashed line for fallback straight-line routes
+        if (isFallbackStraightLine) {
+          polylineOptions.strokeOpacity = 0.6;
+          polylineOptions.icons = [
+            {
+              icon: {
+                path: "M 0,-1 0,1",
+                strokeOpacity: 1,
+                scale: 2,
+              },
+              offset: "0",
+              repeat: "10px",
+            },
+          ];
+        }
+
+        const polyline = new google.maps.Polyline(polylineOptions);
 
         // Add the polyline to the map
         polyline.setMap(this.map);
@@ -102,12 +171,15 @@ export class DirectionsPolyRenderer {
           dayIndex: directionData.dayIndex,
           color: directionData.color,
           pointCount: decodedPath.length,
+          isFallbackStraightLine,
         };
 
         results.push(result);
 
         console.log(
-          `✅ Added polyline route for Day ${directionData.dayIndex + 1} (${
+          `✅ Added ${
+            isFallbackStraightLine ? "straight-line" : "route"
+          } polyline for Day ${directionData.dayIndex + 1} (${
             directionData.color
           }) with ${decodedPath.length} points`
         );

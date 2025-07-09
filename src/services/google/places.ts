@@ -115,7 +115,6 @@ class GooglePlacesService {
         "user_ratings_total",
         "geometry",
         "photos",
-        "reviews",
         "opening_hours",
         "types",
         "editorial_summary",

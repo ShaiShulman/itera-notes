@@ -82,13 +82,9 @@ export async function findPlaceByNameAction(placeName: string): Promise<{
       placeResult.place_id
     );
 
-    console.log("Place Details", placeDetails);
-
     if (!placeDetails) {
       return { success: false, error: "Could not fetch place details" };
     }
-    console.log("Summary", placeDetails.editorial_summary);
-    // Get up to 4 photo references
     const photoReferences = (placeDetails.photos || [])
       .slice(0, 4)
       .map((photo) => photo.photo_reference);

@@ -34,6 +34,7 @@ export interface MapProps {
   onPlaceClick?: (place: MapPlace) => void;
   onMapReady?: (map: google.maps.Map) => void;
   onRefreshDirections?: () => Promise<void>;
+  selectedPlace?: { uid: string; dayIndex: number } | null;
   className?: string;
 }
 
@@ -89,6 +90,8 @@ export interface DirectionsResponse {
     place_id?: string;
     types?: string[];
   }>;
+  // Flag to indicate this is a fallback response with straight lines
+  isFallbackStraightLine?: boolean;
 }
 
 // Directions data interface for rendering

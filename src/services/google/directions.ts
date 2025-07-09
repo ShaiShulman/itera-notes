@@ -1,4 +1,6 @@
 // Google Directions API service
+import { FallbackDirectionsService } from "./fallbackDirections";
+
 export interface DirectionsLeg {
   distance: {
     text: string;
@@ -43,6 +45,8 @@ export interface DirectionsResponse {
     place_id: string;
     types: string[];
   }>;
+  // Flag to indicate this is a fallback response with straight lines
+  isFallbackStraightLine?: boolean;
 }
 
 export interface PlaceCoordinate {
@@ -62,7 +66,7 @@ export class GoogleDirectionsService {
   /**
    * Calculate driving directions between multiple places in order
    * @param places Array of places with coordinates
-   * @returns Promise with directions data
+   * @returns Promise with directions data (real or fallback straight-line)
    */
   async calculateDirections(
     places: PlaceCoordinate[]
@@ -110,6 +114,15 @@ export class GoogleDirectionsService {
       }
 
       const data = await response.json();
+
+      if (data.status === "ZERO_RESULTS") {
+        console.warn(
+          `⚠️ DirectionsService: No driving route found, creating fallback straight-line response`
+        );
+        return FallbackDirectionsService.createFallbackStraightLineResponse(
+          places
+        );
+      }
 
       if (data.status !== "OK") {
         throw new Error(

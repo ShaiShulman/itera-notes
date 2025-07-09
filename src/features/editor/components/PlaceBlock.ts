@@ -1486,8 +1486,33 @@ export default class PlaceBlock {
     }
   }
 
+  private emitPlaceSelectionEvent(isSelected: boolean) {
+    if (!this.data.uid) return;
+
+    const event = new CustomEvent("place:selectionChanged", {
+      detail: {
+        uid: this.data.uid,
+        isSelected,
+        placeName: this.data.name,
+      },
+      bubbles: true,
+    });
+
+    if (this.wrapper) {
+      this.wrapper.dispatchEvent(event);
+    }
+
+    console.log(
+      `📍 PlaceBlock: Emitted selection event for ${this.data.name} (${
+        isSelected ? "selected" : "deselected"
+      })`
+    );
+  }
+
   private toggle() {
     this.isExpanded = !this.isExpanded;
+    this.emitPlaceSelectionEvent(this.isExpanded);
+
     if (this.isExpanded) {
       this.renderExpanded();
     } else {

@@ -29,6 +29,9 @@ export interface ItineraryState {
   // Metadata
   lastUpdated: Date | null;
   isDirty: boolean; // Has unsaved changes
+
+  // Place selection for map interaction
+  selectedPlace: { uid: string; dayIndex: number } | null;
 }
 
 // Define action types for the reducer
@@ -57,7 +60,11 @@ export type ItineraryAction =
     }
   | { type: "CLEAR_ITINERARY" }
   | { type: "MARK_SAVED" }
-  | { type: "MARK_DIRTY" };
+  | { type: "MARK_DIRTY" }
+  | {
+      type: "SET_SELECTED_PLACE";
+      payload: { uid: string; dayIndex: number } | null;
+    };
 
 // Initial state
 const initialState: ItineraryState = {
@@ -67,6 +74,7 @@ const initialState: ItineraryState = {
   error: null,
   lastUpdated: null,
   isDirty: false,
+  selectedPlace: null,
 };
 
 // Reducer function
@@ -233,6 +241,12 @@ function itineraryReducer(
         lastUpdated: new Date(),
       };
 
+    case "SET_SELECTED_PLACE":
+      return {
+        ...state,
+        selectedPlace: action.payload,
+      };
+
     default:
       return state;
   }
@@ -271,6 +285,7 @@ interface ItineraryContextValue {
   clearItinerary: () => void;
   markSaved: () => void;
   markDirty: () => void;
+  setSelectedPlace: (place: { uid: string; dayIndex: number } | null) => void;
 
   // Computed values
   hasItinerary: boolean;
@@ -356,6 +371,13 @@ export function ItineraryProvider({ children }: ItineraryProviderProps) {
     dispatch({ type: "MARK_DIRTY" });
   }, []);
 
+  const setSelectedPlace = useCallback(
+    (place: { uid: string; dayIndex: number } | null) => {
+      dispatch({ type: "SET_SELECTED_PLACE", payload: place });
+    },
+    []
+  );
+
   // Computed values
   const hasItinerary = Boolean(state.currentItinerary);
 
@@ -388,6 +410,7 @@ export function ItineraryProvider({ children }: ItineraryProviderProps) {
     clearItinerary,
     markSaved,
     markDirty,
+    setSelectedPlace,
     hasItinerary,
     totalPlaces,
     getDayByNumber,

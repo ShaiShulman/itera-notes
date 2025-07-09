@@ -8,6 +8,7 @@ import {
   transformEditorDataToMapData,
   createEditorDataHash,
 } from "../utils/dataTransform";
+import { useItinerary } from "@/contexts/ItineraryContext";
 
 interface EditorBlock {
   type: string;
@@ -27,6 +28,9 @@ export function ItineraryMap({
   onRefreshDirections,
   className = "",
 }: ItineraryMapProps) {
+  const { state } = useItinerary();
+  const selectedPlace = state.selectedPlace;
+
   // Create a stable hash to prevent unnecessary re-renders
   const dataHash = useMemo(() => {
     return createEditorDataHash(editorData);
@@ -108,12 +112,12 @@ export function ItineraryMap({
         </div>
       )}
 
-      {/* Google Map */}
       <GoogleMap
         data={mapData}
         onPlaceClick={handlePlaceClick}
         onMapReady={handleMapReady}
         onRefreshDirections={onRefreshDirections}
+        selectedPlace={selectedPlace}
         className="w-full h-full"
       />
     </div>

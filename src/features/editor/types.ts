@@ -39,12 +39,6 @@ export interface PlaceDetails {
     height: number;
     width: number;
   }>;
-  reviews?: Array<{
-    author_name: string;
-    rating: number;
-    text: string;
-    time: number;
-  }>;
   opening_hours?: {
     open_now: boolean;
     weekday_text: string[];

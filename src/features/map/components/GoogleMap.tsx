@@ -12,6 +12,7 @@ import { DirectionsPolyRenderer } from "../../directions/directionsPolyRenderer"
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 const DEFAULT_CENTER = { lat: 40.7128, lng: -74.006 }; // New York City default
+const FOCUSED_ZOOM_LEVEL = 10;
 
 // Debug logging
 console.log(
@@ -25,6 +26,7 @@ export function GoogleMap({
   onPlaceClick,
   onMapReady,
   onRefreshDirections,
+  selectedPlace,
   className = "",
 }: MapProps) {
   console.log("GoogleMap component rendering, data:", data);
@@ -36,6 +38,10 @@ export function GoogleMap({
   const [error, setError] = useState<string | null>(null);
   const [mapContainer, setMapContainer] = useState<HTMLDivElement | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [originalBounds, setOriginalBounds] =
+    useState<google.maps.LatLngBounds | null>(null);
+  const [selectedMarker, setSelectedMarker] =
+    useState<google.maps.Marker | null>(null);
 
   console.log("GoogleMap state - isLoaded:", isLoaded, "error:", error);
 
@@ -263,6 +269,7 @@ export function GoogleMap({
 
         try {
           map.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
+          setOriginalBounds(bounds);
         } catch (error) {
           console.error("Error fitting bounds:", error);
           console.error("Bounds:", bounds);
@@ -312,6 +319,58 @@ export function GoogleMap({
       "🔄 Directions useEffect completed - using DirectionsPolyRenderer"
     );
   }, [data.directions, isLoaded]);
+
+  // Handle place selection for map centering and marker animation
+  useEffect(() => {
+    if (!isLoaded || !mapInstanceRef.current) return;
+
+    const { map, markers } = mapInstanceRef.current;
+
+    // Clear previous selected marker animation
+    if (selectedMarker) {
+      selectedMarker.setAnimation(null);
+      setSelectedMarker(null);
+    }
+
+    if (selectedPlace) {
+      // Find the marker for the selected place
+      const selectedPlaceData = data.places.find(
+        (place) => place.uid === selectedPlace.uid
+      );
+      if (!selectedPlaceData) return;
+
+      const markerIndex = data.places.findIndex(
+        (place) => place.uid === selectedPlace.uid
+      );
+      const marker = markers[markerIndex];
+
+      if (marker) {
+        // Center map on the selected place with moderate zoom
+        const placePosition = {
+          lat: selectedPlaceData.coordinates.lat,
+          lng: selectedPlaceData.coordinates.lng,
+        };
+
+        map.setCenter(placePosition);
+        map.setZoom(FOCUSED_ZOOM_LEVEL);
+
+        // Make marker jump with animation
+        marker.setAnimation(google.maps.Animation.BOUNCE);
+        setSelectedMarker(marker);
+
+        // Stop the bounce animation after 3 seconds
+        setTimeout(() => {
+          if (marker) {
+            marker.setAnimation(null);
+          }
+        }, 3000);
+      }
+    } else {
+      if (originalBounds) {
+        map.fitBounds(originalBounds);
+      }
+    }
+  }, [selectedPlace, isLoaded, data.places, originalBounds, selectedMarker]);
 
   if (error) {
     console.log("Rendering error state:", error);

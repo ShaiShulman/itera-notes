@@ -16,6 +16,7 @@ import {
   DirectionsResponse,
 } from "@/services/google/directions";
 import { getDayColor } from "@/features/map/utils/colors";
+import { useItinerary } from "@/contexts/ItineraryContext";
 
 console.log("ItineraryEditor module: Loading...");
 
@@ -169,6 +170,7 @@ export default function ItineraryEditor({
   const holderRef = useRef<HTMLDivElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { setSelectedPlace } = useItinerary();
 
   // Refresh directions function
   const refreshDirections = useCallback(async (): Promise<{
@@ -225,6 +227,15 @@ export default function ItineraryEditor({
           const directionsResponse: DirectionsResponse =
             await calculateDirections(places);
 
+          // Check if this is a fallback straight-line response
+          if (directionsResponse.isFallbackStraightLine) {
+            console.warn(
+              `⚠️ Day ${
+                dayIndex + 1
+              }: No driving route found, using straight-line fallback`
+            );
+          }
+
           // Extract driving times and distances
           const { times, distances } = await extractDrivingTimes(
             directionsResponse,
@@ -248,8 +259,11 @@ export default function ItineraryEditor({
             directionsResult: directionsResponse,
           });
 
+          const routeType = directionsResponse.isFallbackStraightLine
+            ? "straight-line fallback"
+            : "driving route";
           console.log(
-            `✅ Day ${dayIndex + 1}: Directions calculated successfully`
+            `✅ Day ${dayIndex + 1}: ${routeType} calculated successfully`
           );
         } catch (error) {
           console.error(
@@ -274,8 +288,13 @@ export default function ItineraryEditor({
         return place;
       });
 
+      const fallbackCount = directionsResults.filter(
+        (r) => r.directionsResult.isFallbackStraightLine
+      ).length;
+      const realRoutesCount = directionsResults.length - fallbackCount;
+
       console.log(
-        `✅ ItineraryEditor: Directions refresh completed - ${directionsResults.length} routes calculated`
+        `✅ ItineraryEditor: Directions refresh completed - ${realRoutesCount} driving routes, ${fallbackCount} straight-line fallbacks`
       );
 
       return {
@@ -378,10 +397,30 @@ export default function ItineraryEditor({
               }
             };
 
+            // Add event listener for place selection events
+            const handlePlaceSelectionEvent = (event: CustomEvent) => {
+              const { uid, dayIndex, isSelected, placeName } = event.detail;
+              console.log(
+                `ItineraryEditor: Place selection event - ${placeName} (${
+                  isSelected ? "selected" : "deselected"
+                })`
+              );
+
+              if (isSelected) {
+                setSelectedPlace({ uid, dayIndex });
+              } else {
+                setSelectedPlace(null);
+              }
+            };
+
             if (holderRef.current) {
               holderRef.current.addEventListener(
                 "dayblock:addBlock",
                 handleAddBlockRequest as EventListener
+              );
+              holderRef.current.addEventListener(
+                "place:selectionChanged",
+                handlePlaceSelectionEvent as EventListener
               );
             }
           },
@@ -398,6 +437,10 @@ export default function ItineraryEditor({
       clearTimeout(timer);
       if (holderRef.current) {
         holderRef.current.removeEventListener("dayblock:addBlock", () => {});
+        holderRef.current.removeEventListener(
+          "place:selectionChanged",
+          () => {}
+        );
       }
       if (
         editorRef.current &&
