@@ -28,7 +28,7 @@ export function ItineraryMap({
   onRefreshDirections,
   className = "",
 }: ItineraryMapProps) {
-  const { state } = useItinerary();
+  const { state, setSelectedPlace } = useItinerary();
   const selectedPlace = state.selectedPlace;
 
   // Create a stable hash to prevent unnecessary re-renders
@@ -63,13 +63,32 @@ export function ItineraryMap({
     return emptyResult;
   }, [dataHash, directionsData]); // Include directionsData in dependencies
 
-  const handlePlaceClick = useCallback((place: MapPlace) => {
-    console.log("Place clicked:", place);
-    // Here you could implement functionality like:
-    // - Highlighting the corresponding place in the editor
-    // - Opening a place details popup
-    // - Scrolling to the place in the editor
-  }, []);
+  const handlePlaceClick = useCallback(
+    (place: MapPlace | null) => {
+      console.log("📍 ItineraryMap: Place clicked:", place);
+
+      // Handle deselection (place is null)
+      if (place === null) {
+        setSelectedPlace(null);
+        console.log("📍 ItineraryMap: Deselected all places");
+        return;
+      }
+
+      // Set the selected place in the context
+      if (place.uid && place.dayIndex !== undefined) {
+        setSelectedPlace({ uid: place.uid, dayIndex: place.dayIndex });
+        console.log(
+          `📍 ItineraryMap: Set selected place - uid: ${place.uid}, dayIndex: ${place.dayIndex}`
+        );
+      } else {
+        console.warn(
+          "📍 ItineraryMap: Place clicked but missing uid or dayIndex:",
+          place
+        );
+      }
+    },
+    [setSelectedPlace]
+  );
 
   const handleMapReady = useCallback((map: google.maps.Map) => {
     console.log("Map ready:", map);

@@ -97,6 +97,7 @@ export default class PlaceBlock {
   render() {
     this.wrapper = document.createElement("div");
     this.wrapper.classList.add("place-block");
+    this.wrapper.setAttribute("data-uid", this.data.uid || "");
     this.wrapper.style.cssText = `
       border: 2px solid #10b981;
       border-radius: 12px;
@@ -116,6 +117,25 @@ export default class PlaceBlock {
       e.stopPropagation();
       if (!this.isCurrentlyEditing()) {
         this.toggle();
+      }
+    });
+
+    // Add event listeners for force expand/collapse
+    this.wrapper.addEventListener("place:forceExpand", (e) => {
+      e.stopPropagation();
+      if (!this.isExpanded) {
+        this.isExpanded = true;
+        this.renderExpanded();
+        console.log(`📍 PlaceBlock: Force expanded ${this.data.name}`);
+      }
+    });
+
+    this.wrapper.addEventListener("place:forceCollapse", (e) => {
+      e.stopPropagation();
+      if (this.isExpanded) {
+        this.isExpanded = false;
+        this.renderCollapsed();
+        console.log(`📍 PlaceBlock: Force collapsed ${this.data.name}`);
       }
     });
 

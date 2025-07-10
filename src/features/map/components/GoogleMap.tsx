@@ -141,6 +141,15 @@ export function GoogleMap({
         // Initialize directions polyline renderer
         directionsRendererRef.current = new DirectionsPolyRenderer(map);
 
+        // Add map click handler to deselect places
+        map.addListener("click", () => {
+          console.log("📍 Map clicked - deselecting places");
+          if (onPlaceClick) {
+            // Call with a special marker to indicate deselection
+            onPlaceClick(null as any);
+          }
+        });
+
         setIsLoaded(true);
         onMapReady?.(map);
       })

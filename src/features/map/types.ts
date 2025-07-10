@@ -31,7 +31,7 @@ export interface DayData {
 
 export interface MapProps {
   data: MapData;
-  onPlaceClick?: (place: MapPlace) => void;
+  onPlaceClick?: (place: MapPlace | null) => void;
   onMapReady?: (map: google.maps.Map) => void;
   onRefreshDirections?: () => Promise<void>;
   selectedPlace?: { uid: string; dayIndex: number } | null;

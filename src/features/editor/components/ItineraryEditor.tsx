@@ -170,7 +170,85 @@ export default function ItineraryEditor({
   const holderRef = useRef<HTMLDivElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { setSelectedPlace } = useItinerary();
+  const { setSelectedPlace, state } = useItinerary();
+  const { selectedPlace } = state;
+
+  // Function to find and expand a place block by uid
+  const findAndExpandPlace = useCallback((uid: string) => {
+    if (!holderRef.current) return;
+
+    // Find all place blocks in the editor
+    const placeBlocks = holderRef.current.querySelectorAll(".place-block");
+
+    // First, collapse all place blocks
+    placeBlocks.forEach((block) => {
+      const blockElement = block as HTMLElement;
+      // Try to find the PlaceBlock instance and collapse it
+      // We'll emit a custom event to handle this
+      blockElement.dispatchEvent(
+        new CustomEvent("place:forceCollapse", { bubbles: true })
+      );
+    });
+
+    // Find the target place block by uid
+    let targetBlock: HTMLElement | null = null;
+
+    placeBlocks.forEach((block) => {
+      const blockElement = block as HTMLElement;
+      // Check if this block has the matching uid by looking for it in the dataset or data attribute
+      const blockData =
+        blockElement.dataset.uid || blockElement.getAttribute("data-uid");
+
+      if (blockData === uid) {
+        targetBlock = blockElement;
+      }
+    });
+
+    if (targetBlock) {
+      // Scroll to the target block
+      (targetBlock as HTMLElement).scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+
+      // Expand the target block after a short delay to ensure scrolling completes
+      setTimeout(() => {
+        targetBlock!.dispatchEvent(
+          new CustomEvent("place:forceExpand", { bubbles: true })
+        );
+      }, 300);
+
+      console.log(
+        `📍 ItineraryEditor: Found and expanded place with uid: ${uid}`
+      );
+    } else {
+      console.warn(
+        `📍 ItineraryEditor: Could not find place block with uid: ${uid}`
+      );
+    }
+  }, []);
+
+  // Listen for place selection changes from context
+  useEffect(() => {
+    if (selectedPlace && selectedPlace.uid) {
+      console.log(
+        `📍 ItineraryEditor: Place selected from context: ${selectedPlace.uid}`
+      );
+      findAndExpandPlace(selectedPlace.uid);
+    } else {
+      console.log("📍 ItineraryEditor: No place selected, collapsing all");
+      // Collapse all place blocks when no place is selected
+      if (holderRef.current) {
+        const placeBlocks = holderRef.current.querySelectorAll(".place-block");
+        placeBlocks.forEach((block) => {
+          const blockElement = block as HTMLElement;
+          blockElement.dispatchEvent(
+            new CustomEvent("place:forceCollapse", { bubbles: true })
+          );
+        });
+      }
+    }
+  }, [selectedPlace, findAndExpandPlace]);
 
   // Refresh directions function
   const refreshDirections = useCallback(async (): Promise<{
