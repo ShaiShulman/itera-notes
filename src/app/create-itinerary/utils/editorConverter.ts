@@ -68,6 +68,13 @@ export function convertItineraryToEditorData(
     };
 
     blocks.push(dayBlock);
+    if (day.description) {
+      blocks.push({
+        id: generateBlockId(),
+        type: "paragraph",
+        data: { text: day.description },
+      });
+    }
 
     // Add individual place blocks for each place in the day
     for (let i = 0; i < day.places.length; i++) {
@@ -101,15 +108,17 @@ export function convertItineraryToEditorData(
       };
 
       blocks.push(placeBlock);
-    }
 
-    // Add spacing between days
-    if (day.dayNumber < itinerary.totalDays) {
-      blocks.push({
-        id: generateBlockId(),
-        type: "delimiter",
-        data: {},
-      });
+      // Add paragraph block after each place if there's paragraph text
+      if (place.paragraph && place.paragraph.trim()) {
+        blocks.push({
+          id: generateBlockId(),
+          type: "paragraph",
+          data: {
+            text: place.paragraph.trim(),
+          },
+        });
+      }
     }
   }
 
@@ -162,6 +171,7 @@ export function convertEditorDataToItinerary(
       name: place.name,
       lat: place.lat,
       lng: place.lng,
+      paragraph: place.paragraph, // Include the itinerary description text
     }));
 
     const day: ItineraryDay = {

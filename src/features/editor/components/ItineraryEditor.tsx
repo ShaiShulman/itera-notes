@@ -17,10 +17,9 @@ import {
 } from "@/services/google/directions";
 import { getDayColor } from "@/features/map/utils/colors";
 import { useItinerary } from "@/contexts/ItineraryContext";
-
-console.log("ItineraryEditor module: Loading...");
-
-// Editor.js block interface
+import HeaderBlock from "@editorjs/header";
+import ParagraphBlock from "@editorjs/paragraph";
+import "./editorjs-global.css";
 interface EditorBlock {
   type: string;
   data: Record<string, unknown>;
@@ -413,6 +412,8 @@ export default function ItineraryEditor({
           readOnly,
           data,
           tools: {
+            header: HeaderBlock,
+            paragraph: ParagraphBlock,
             day: DayBlock,
             place: PlaceBlock,
           },
@@ -759,37 +760,9 @@ export default function ItineraryEditor({
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div
           ref={holderRef}
-          className="h-full border border-slate-200 rounded-lg p-4 text-black"
-          style={{
-            fontSize: "16px",
-            lineHeight: "1.6",
-            color: "#000000",
-          }}
+          className="h-full border border-slate-200 rounded-lg p-4 text-black editor-holder"
         />
       </div>
-
-      {/* Global styles for Editor.js content */}
-      <style jsx>{`
-        :global(.ce-block__content),
-        :global(.ce-paragraph),
-        :global(.ce-paragraph[data-placeholder]:empty::before),
-        :global(.cdx-block) {
-          color: #000000 !important;
-        }
-
-        :global(.ce-paragraph[data-placeholder]:empty::before) {
-          color: #6b7280 !important;
-        }
-
-        :global(.codex-editor) {
-          height: 100% !important;
-        }
-
-        :global(.codex-editor__redactor) {
-          height: 100% !important;
-          overflow: visible !important;
-        }
-      `}</style>
     </div>
   );
 }
