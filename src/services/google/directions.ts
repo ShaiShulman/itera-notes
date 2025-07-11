@@ -49,6 +49,8 @@ export interface DirectionsResponse {
   isFallbackStraightLine?: boolean;
 }
 
+import { apiLogger } from "@/services/logging/apiLogger";
+
 export interface PlaceCoordinate {
   lat: number;
   lng: number;
@@ -78,6 +80,7 @@ export class GoogleDirectionsService {
     const origin = places[0];
     const destination = places[places.length - 1];
     const waypoints = places.slice(1, -1);
+    const startTime = Date.now();
 
     // Build the API URL
     const baseUrl = "https://maps.googleapis.com/maps/api/directions/json";
@@ -114,27 +117,96 @@ export class GoogleDirectionsService {
       }
 
       const data = await response.json();
+      const duration = Date.now() - startTime;
 
       if (data.status === "ZERO_RESULTS") {
         console.warn(
           `⚠️ DirectionsService: No driving route found, creating fallback straight-line response`
         );
+
+        // Log zero results
+        apiLogger.logGoogleDirectionsCall({
+          origin: origin.name,
+          destination: destination.name,
+          waypoints: waypoints.map((wp) => wp.name),
+          mode: "driving",
+          routeFound: false,
+          duration,
+          status: "success",
+        });
+
         return FallbackDirectionsService.createFallbackStraightLineResponse(
           places
         );
       }
 
       if (data.status !== "OK") {
-        throw new Error(
+        const error = new Error(
           `Directions API error: ${data.status} - ${
             data.error_message || "Unknown error"
           }`
         );
+
+        // Log API error
+        apiLogger.logGoogleDirectionsCall({
+          origin: origin.name,
+          destination: destination.name,
+          waypoints: waypoints.map((wp) => wp.name),
+          mode: "driving",
+          routeFound: false,
+          duration,
+          status: "error",
+          error: error.message,
+        });
+
+        throw error;
       }
+
+      // Extract route information for logging
+      const route = data.routes?.[0];
+      const totalDistance = route?.legs?.reduce(
+        (sum: number, leg: any) => sum + (leg.distance?.value || 0),
+        0
+      );
+      const totalDuration = route?.legs?.reduce(
+        (sum: number, leg: any) => sum + (leg.duration?.value || 0),
+        0
+      );
+
+      // Log successful call
+      apiLogger.logGoogleDirectionsCall({
+        origin: origin.name,
+        destination: destination.name,
+        waypoints: waypoints.map((wp) => wp.name),
+        mode: "driving",
+        routeFound: true,
+        totalDistance: totalDistance
+          ? `${(totalDistance / 1000).toFixed(1)} km`
+          : undefined,
+        totalDuration: totalDuration
+          ? `${Math.round(totalDuration / 60)} mins`
+          : undefined,
+        duration,
+        status: "success",
+      });
 
       console.log(`✅ DirectionsService: Successfully calculated directions`);
       return data;
     } catch (error) {
+      const duration = Date.now() - startTime;
+
+      // Log failed call
+      apiLogger.logGoogleDirectionsCall({
+        origin: origin.name,
+        destination: destination.name,
+        waypoints: waypoints.map((wp) => wp.name),
+        mode: "driving",
+        routeFound: false,
+        duration,
+        status: "error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+
       console.error(
         "❌ DirectionsService: Error calculating directions:",
         error

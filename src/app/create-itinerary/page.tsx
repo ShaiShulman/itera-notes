@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useItinerary } from "@/contexts/ItineraryContext";
 import { convertItineraryToEditorData } from "./utils/editorConverter";
@@ -140,8 +140,8 @@ export default function NewItinerary() {
     }
   };
 
-  // Get today's date for date input min values
-  const today = new Date().toISOString().split("T")[0];
+  // Get today's date for date input min values (memoized to prevent hydration issues)
+  const today = useMemo(() => new Date().toISOString().split("T")[0], []);
 
   if (isLoading) {
     return (

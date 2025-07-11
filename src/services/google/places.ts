@@ -1,3 +1,5 @@
+import { apiLogger } from "@/services/logging/apiLogger";
+
 interface PlaceSearchResult {
   place_id: string;
   name: string;
@@ -92,10 +94,35 @@ class GooglePlacesService {
   }
 
   async findPlaceByName(placeName: string): Promise<PlaceSearchResult | null> {
+    const startTime = Date.now();
+
     try {
       const results = await this.searchPlaces(placeName);
-      return results.length > 0 ? results[0] : null;
+      const duration = Date.now() - startTime;
+      const found = results.length > 0;
+
+      // Log successful call
+      apiLogger.logGooglePlacesCall({
+        query: placeName,
+        placeId: found ? results[0].place_id : undefined,
+        found,
+        duration,
+        status: "success",
+      });
+
+      return found ? results[0] : null;
     } catch (error) {
+      const duration = Date.now() - startTime;
+
+      // Log failed call
+      apiLogger.logGooglePlacesCall({
+        query: placeName,
+        found: false,
+        duration,
+        status: "error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+
       console.error("Error finding place by name:", error);
       throw error;
     }

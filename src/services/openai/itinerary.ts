@@ -1,10 +1,9 @@
 import OpenAI from "openai";
-import {
-  createItineraryPrompt,
-  parseItineraryResponse,
-  enrichPlacesWithGoogleData,
-  GeneratedItinerary,
-} from "@/features/generateLLM";
+import { createItineraryPrompt } from "@/features/generateLLM/promptBuilder";
+import { parseItineraryResponse } from "@/features/generateLLM/responseParser";
+import { enrichPlacesWithGoogleData } from "@/features/generateLLM/enrichment";
+import { GeneratedItinerary } from "@/features/generateLLM/types";
+import { apiLogger } from "@/services/logging/apiLogger";
 
 if (!process.env.OPENAI_API_KEY) {
   throw new Error("OPENAI_API_KEY environment variable is required");
@@ -28,7 +27,7 @@ export type {
   PlaceLocation,
   ItineraryDay,
   GeneratedItinerary,
-} from "@/features/generateLLM";
+} from "@/features/generateLLM/types";
 
 export async function generateItinerary(
   request: ItineraryGenerationRequest
@@ -58,6 +57,8 @@ export async function generateItinerary(
   });
 
   console.log("prompt", prompt);
+  const startTime = Date.now();
+
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4",
@@ -77,10 +78,28 @@ export async function generateItinerary(
     });
 
     const response = completion.choices[0]?.message?.content;
+    const duration = Date.now() - startTime;
+
     console.log("response", response);
     if (!response) {
       throw new Error("No response from OpenAI");
     }
+
+    // Log successful OpenAI call
+    apiLogger.logOpenAICall({
+      model: "gpt-4",
+      prompt,
+      response,
+      tokensUsed: completion.usage
+        ? {
+            promptTokens: completion.usage.prompt_tokens,
+            completionTokens: completion.usage.completion_tokens,
+            totalTokens: completion.usage.total_tokens,
+          }
+        : undefined,
+      duration,
+      status: "success",
+    });
 
     // Parse the OpenAI response into structured data
     const parsedItinerary = parseItineraryResponse(
@@ -97,6 +116,17 @@ export async function generateItinerary(
 
     return enrichedItinerary;
   } catch (error) {
+    const duration = Date.now() - startTime;
+
+    // Log failed OpenAI call
+    apiLogger.logOpenAICall({
+      model: "gpt-4",
+      prompt,
+      duration,
+      status: "error",
+      error: error instanceof Error ? error.message : String(error),
+    });
+
     console.error("Error generating itinerary with OpenAI:", error);
     throw new Error("Failed to generate itinerary");
   }
