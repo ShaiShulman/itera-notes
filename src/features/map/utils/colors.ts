@@ -50,11 +50,11 @@ export function getDefaultPlaceColor(): string {
 }
 
 /**
- * Create SVG marker icon with specified color and number
+ * Create SVG marker icon with specified color and number/letter
  */
 export function createNumberedMarkerIcon(
   color: string,
-  number: number,
+  number: number | string,
   size: number = 32
 ): string {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`

@@ -14,6 +14,7 @@ export interface MapPlace {
   color?: string; // Color for this specific place
   drivingTimeFromPrevious?: number; // Duration in minutes from previous place
   drivingDistanceFromPrevious?: number; // Distance in meters from previous place
+  type?: "place" | "hotel"; // Type of place
 }
 
 export interface MapData {

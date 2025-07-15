@@ -55,7 +55,8 @@ export interface DayBlockData {
   title?: string;
 }
 
-export interface PlaceBlockData {
+// Base type for place-like blocks (places, hotels, etc.)
+export interface BasePlaceBlockData {
   uid?: string;
   placeId?: string;
   name?: string;
@@ -70,6 +71,18 @@ export interface PlaceBlockData {
   status?: "idle" | "loading" | "found" | "error" | "free-text";
   drivingTimeFromPrevious?: number;
   drivingDistanceFromPrevious?: number;
+}
+
+export interface PlaceBlockData extends BasePlaceBlockData {
+  // Place-specific properties can be added here if needed
+  // Currently uses all properties from BasePlaceBlockData
+  readonly __type?: "place"; // Type marker for TypeScript differentiation
+}
+
+export interface HotelBlockData extends BasePlaceBlockData {
+  // Hotel-specific properties can be added here if needed
+  // Currently uses all properties from BasePlaceBlockData
+  readonly __type?: "hotel"; // Type marker for TypeScript differentiation
 }
 
 export interface EditorBlockData {

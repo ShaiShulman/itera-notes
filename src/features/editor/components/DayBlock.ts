@@ -258,6 +258,43 @@ export default class DayBlock {
       this.addBlockAfterDay("paragraph");
     });
 
+    // Add Hotel button
+    const addHotelBtn = document.createElement("button");
+    addHotelBtn.style.cssText = `
+      background: #8b5cf6;
+      color: white;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: background-color 0.2s;
+    `;
+    addHotelBtn.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+        <path d="M2 12h4l2-2h2l2 2h4v5H2v-5z" stroke="currentColor" stroke-width="2" fill="none"/>
+        <path d="M12 7v5" stroke="currentColor" stroke-width="2"/>
+        <path d="M8 17h8" stroke="currentColor" stroke-width="2"/>
+        <path d="M3 7v10" stroke="currentColor" stroke-width="2"/>
+        <path d="M21 7v10" stroke="currentColor" stroke-width="2"/>
+        <path d="M4 4h16v3H4z" stroke="currentColor" stroke-width="2" fill="none"/>
+      </svg>
+      Hotel
+    `;
+    addHotelBtn.addEventListener("mouseenter", () => {
+      addHotelBtn.style.backgroundColor = "#7c3aed";
+    });
+    addHotelBtn.addEventListener("mouseleave", () => {
+      addHotelBtn.style.backgroundColor = "#8b5cf6";
+    });
+    addHotelBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.addBlockAfterDay("hotel");
+    });
+
     // Expand arrow
     const expandArrow = document.createElement("div");
     expandArrow.style.cssText = `
@@ -274,6 +311,7 @@ export default class DayBlock {
     leftContent.appendChild(titleDisplay);
 
     rightControls.appendChild(addPlaceBtn);
+    rightControls.appendChild(addHotelBtn);
     rightControls.appendChild(addTextBtn);
     rightControls.appendChild(expandArrow);
 
@@ -541,7 +579,7 @@ export default class DayBlock {
     }
   }
 
-  private addBlockAfterDay(blockType: "place" | "paragraph") {
+  private addBlockAfterDay(blockType: "place" | "paragraph" | "hotel") {
     console.log(
       `DayBlock: Adding ${blockType} after day ${this.actualDayNumber}`
     );

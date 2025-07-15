@@ -1,11 +1,11 @@
 import { MapData, MapPlace, DayData } from "../types";
 import { getDayColor } from "./colors";
-import { DayBlockData, PlaceBlockData } from "../../editor/types";
+import { BasePlaceBlockData, DayBlockData } from "../../editor/types";
 
 // Editor.js block interface
 interface EditorBlock {
   type: string;
-  data: DayBlockData | PlaceBlockData | Record<string, unknown>;
+  data: DayBlockData | BasePlaceBlockData | Record<string, unknown>;
 }
 
 /**
@@ -17,9 +17,9 @@ export function createEditorDataHash(blocks: EditorBlock[]): string {
       if (block.type === "day") {
         const dayData = block.data as DayBlockData;
         return `day:${dayData.title}:${dayData.date}`;
-      } else if (block.type === "place") {
-        const placeData = block.data as PlaceBlockData;
-        return `place:${placeData.name}:${placeData.lat}:${placeData.lng}`;
+      } else if (block.type === "place" || block.type === "hotel") {
+        const placeData = block.data as BasePlaceBlockData;
+        return `${block.type}:${placeData.name}:${placeData.lat}:${placeData.lng}`;
       }
       return `${block.type}:unknown`;
     })
@@ -39,13 +39,15 @@ export function transformEditorDataToMapData(blocks: EditorBlock[]): MapData {
   const days: DayData[] = [];
   const places: MapPlace[] = [];
   let currentDayIndex = -1;
-  let placeNumberInDay = 0; // Track place number within current day
+  let placeNumberInDay = 0; // Track place number within current day (for places only)
+  let hotelNumberInDay = 0; // Track hotel number within current day (for hotels only)
 
   blocks.forEach((block) => {
     if (block.type === "day") {
       const dayData = block.data as DayBlockData;
       currentDayIndex = days.length;
       placeNumberInDay = 0; // Reset place counter for new day
+      hotelNumberInDay = 0; // Reset hotel counter for new day
 
       console.log(`📅 Day ${currentDayIndex + 1}:`, dayData.title);
 
@@ -55,12 +57,19 @@ export function transformEditorDataToMapData(blocks: EditorBlock[]): MapData {
         date: dayData.date,
         color: getDayColor(currentDayIndex),
       });
-    } else if (block.type === "place") {
-      const placeData = block.data as PlaceBlockData;
-
+    } else if (block.type === "place" || block.type === "hotel") {
+      const placeData = block.data as BasePlaceBlockData;
       // Only add places that have valid location data
       if (placeData.lat && placeData.lng && placeData.name) {
-        placeNumberInDay++; // Increment place number within day
+        // Increment the appropriate counter based on type
+        let itemNumberInDay: number;
+        if (block.type === "place") {
+          placeNumberInDay++;
+          itemNumberInDay = placeNumberInDay;
+        } else {
+          hotelNumberInDay++;
+          itemNumberInDay = hotelNumberInDay;
+        }
 
         const newPlace: MapPlace = {
           id: `place-${Date.now()}-${Math.random()}`,
@@ -70,15 +79,20 @@ export function transformEditorDataToMapData(blocks: EditorBlock[]): MapData {
           dayIndex: currentDayIndex >= 0 ? currentDayIndex : undefined,
           placeId: placeData.placeId,
           thumbnailUrl: placeData.thumbnailUrl,
-          placeNumberInDay,
+          placeNumberInDay: itemNumberInDay,
           color:
             currentDayIndex >= 0 ? getDayColor(currentDayIndex) : "#6B7280",
           drivingTimeFromPrevious: placeData.drivingTimeFromPrevious,
           drivingDistanceFromPrevious: placeData.drivingDistanceFromPrevious,
+          type: block.type === "place" ? "place" : "hotel",
         };
 
         console.log(
-          `📍 Place ${placeNumberInDay}: ${placeData.name} at ${placeData.lat}, ${placeData.lng} (day color: ${newPlace.color})`
+          `📍 ${
+            block.type === "place" ? "Place" : "Hotel"
+          } ${itemNumberInDay}: ${placeData.name} at ${placeData.lat}, ${
+            placeData.lng
+          } (day color: ${newPlace.color})`
         );
         places.push(newPlace);
       } else {
@@ -103,7 +117,7 @@ export function extractPlacesFromEditorData(blocks: EditorBlock[]): MapPlace[] {
     if (block.type === "day") {
       currentDayIndex++;
     } else if (block.type === "place") {
-      const placeData = block.data as PlaceBlockData;
+      const placeData = block.data as BasePlaceBlockData;
 
       if (placeData.lat && placeData.lng && placeData.name) {
         places.push({

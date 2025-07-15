@@ -105,7 +105,10 @@ async function extractPlacesDataFromEditor(editorRef: any): Promise<{
       if (block.type === "day") {
         currentDayIndex++;
         placesByDay[currentDayIndex] = [];
-      } else if (block.type === "place" && currentDayIndex >= 0) {
+      } else if (
+        (block.type === "place" || block.type === "hotel") &&
+        currentDayIndex >= 0
+      ) {
         const placeData = block.data as PlaceBlockData;
 
         // Only include places with valid coordinates
@@ -176,13 +179,15 @@ export default function ItineraryEditor({
   const findAndExpandPlace = useCallback((uid: string) => {
     if (!holderRef.current) return;
 
-    // Find all place blocks in the editor
-    const placeBlocks = holderRef.current.querySelectorAll(".place-block");
+    // Find all place and hotel blocks in the editor
+    const placeBlocks = holderRef.current.querySelectorAll(
+      ".place-block, .hotel-block"
+    );
 
-    // First, collapse all place blocks
+    // First, collapse all place and hotel blocks
     placeBlocks.forEach((block) => {
       const blockElement = block as HTMLElement;
-      // Try to find the PlaceBlock instance and collapse it
+      // Try to find the PlaceBlock/HotelBlock instance and collapse it
       // We'll emit a custom event to handle this
       blockElement.dispatchEvent(
         new CustomEvent("place:forceCollapse", { bubbles: true })
@@ -236,9 +241,11 @@ export default function ItineraryEditor({
       findAndExpandPlace(selectedPlace.uid);
     } else {
       console.log("📍 ItineraryEditor: No place selected, collapsing all");
-      // Collapse all place blocks when no place is selected
+      // Collapse all place and hotel blocks when no place is selected
       if (holderRef.current) {
-        const placeBlocks = holderRef.current.querySelectorAll(".place-block");
+        const placeBlocks = holderRef.current.querySelectorAll(
+          ".place-block, .hotel-block"
+        );
         placeBlocks.forEach((block) => {
           const blockElement = block as HTMLElement;
           blockElement.dispatchEvent(
@@ -401,6 +408,7 @@ export default function ItineraryEditor({
         const { default: EditorJS } = await import("@editorjs/editorjs");
         const { default: DayBlock } = await import("./DayBlock");
         const { default: PlaceBlock } = await import("./PlaceBlock");
+        const { default: HotelBlock } = await import("./HotelBlock");
 
         console.log(
           "ItineraryEditor: Editor.js and custom blocks imported successfully"
@@ -416,6 +424,7 @@ export default function ItineraryEditor({
             paragraph: ParagraphBlock,
             day: DayBlock,
             place: PlaceBlock,
+            hotel: HotelBlock,
           },
           onChange: async () => {
             console.log("ItineraryEditor: Content changed");
@@ -717,6 +726,38 @@ export default function ItineraryEditor({
                 />
               </svg>
               Place
+            </button>
+
+            <button
+              onClick={() => insertBlock("hotel")}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-md hover:bg-purple-100 transition-colors text-sm font-medium"
+              title="Add Hotel"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M2 12h4l2-2h2l2 2h4v5H2v-5z"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  fill="none"
+                />
+                <path d="M12 7v5" stroke="currentColor" strokeWidth="2" />
+                <path d="M8 17h8" stroke="currentColor" strokeWidth="2" />
+                <path d="M3 7v10" stroke="currentColor" strokeWidth="2" />
+                <path d="M21 7v10" stroke="currentColor" strokeWidth="2" />
+                <path
+                  d="M4 4h16v3H4z"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  fill="none"
+                />
+              </svg>
+              Hotel
             </button>
 
             <button

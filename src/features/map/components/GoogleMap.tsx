@@ -221,6 +221,16 @@ export function GoogleMap({
       // Use place number within day or global index
       const markerNumber = place.placeNumberInDay || index + 1;
 
+      // Format the marker display based on type
+      let markerDisplay: string;
+      if (place.type === "hotel") {
+        // Convert number to letter: 1->A, 2->B, 3->C, etc.
+        markerDisplay = String.fromCharCode(64 + markerNumber);
+      } else {
+        // Use regular numbers for places
+        markerDisplay = markerNumber.toString();
+      }
+
       // Ensure coordinates are in the correct LatLngLiteral format
       const position = {
         lat: Number(place.coordinates.lat),
@@ -232,7 +242,7 @@ export function GoogleMap({
         map,
         title: place.name,
         icon: {
-          url: createNumberedMarkerIcon(color, markerNumber),
+          url: createNumberedMarkerIcon(color, markerDisplay),
           scaledSize: new google.maps.Size(32, 32),
           anchor: new google.maps.Point(16, 32),
         },
@@ -248,7 +258,7 @@ export function GoogleMap({
       });
 
       markers.push(marker);
-      console.log(`📍 Marker ${markerNumber}: ${place.name} (${color})`);
+      console.log(`📍 Marker ${markerDisplay}: ${place.name} (${color})`);
     });
 
     console.log(`✅ Created ${markers.length} markers`);
