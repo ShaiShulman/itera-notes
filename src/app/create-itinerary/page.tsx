@@ -3,6 +3,10 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useItinerary } from "@/contexts/ItineraryContext";
+import {
+  CreateItineraryProvider,
+  useCreateItineraryForm,
+} from "@/contexts/CreateItineraryContext";
 import { convertItineraryToEditorData } from "./utils/editorConverter";
 import {
   PlusIcon,
@@ -24,25 +28,18 @@ interface FormErrors {
   [key: string]: string;
 }
 
-export default function NewItinerary() {
+function NewItineraryForm() {
   const router = useRouter();
   const { setItinerary, setEditorData } = useItinerary();
+  const { formData, updateFormData, isFormDirty } = useCreateItineraryForm();
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
-  const [formData, setFormData] = useState<Partial<NewItineraryForm>>({
-    destination: "",
-    startDate: "",
-    endDate: "",
-    interests: [],
-    travelStyle: undefined,
-    additionalNotes: "",
-  });
   const [newInterest, setNewInterest] = useState("");
 
   // Handle form field changes
   const handleInputChange = (field: keyof NewItineraryForm, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    updateFormData(field, value);
     // Clear error for this field
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }));
@@ -124,6 +121,9 @@ export default function NewItinerary() {
         const editorData = convertItineraryToEditorData(actionResult.data);
         setEditorData(editorData);
 
+        // Keep form data in localStorage for when user navigates back
+        // Don't clear form data after successful generation
+
         // Redirect to main editor page
         router.push("/");
       } else {
@@ -139,6 +139,16 @@ export default function NewItinerary() {
       setLoadingMessage("");
     }
   };
+
+  // Handle save as draft
+  const handleSaveDraft = () => {
+    // TODO: Implement actual draft saving logic
+    console.log("Draft saved:", formData);
+    // For now, just show a success message without clearing
+    alert("Draft saved! Your form data will remain for future editing.");
+  };
+
+  // Remove clear form handler
 
   // Get today's date for date input min values (memoized to prevent hydration issues)
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
@@ -175,6 +185,11 @@ export default function NewItinerary() {
           </div>
           <h1 className="text-3xl font-bold text-slate-900 mb-4">
             Create New Itinerary
+            {isFormDirty && (
+              <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                Unsaved changes
+              </span>
+            )}
           </h1>
           <p className="text-lg text-slate-600">
             Tell us about your dream trip and we&apos;ll create a personalized
@@ -416,14 +431,17 @@ export default function NewItinerary() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center justify-center gap-2"
               >
+                <SparklesIcon className="h-5 w-5" />
                 Generate My Itinerary
               </button>
               <button
                 type="button"
-                className="flex-1 border border-slate-300 text-slate-700 px-6 py-3 rounded-lg font-medium hover:bg-slate-50 transition-colors focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
+                onClick={handleSaveDraft}
+                className="flex-1 border border-slate-300 text-slate-700 px-6 py-3 rounded-lg font-medium hover:bg-slate-50 transition-colors focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 flex items-center justify-center gap-2"
               >
+                <CheckIcon className="h-5 w-5" />
                 Save as Draft
               </button>
             </div>
@@ -438,5 +456,13 @@ export default function NewItinerary() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function NewItinerary() {
+  return (
+    <CreateItineraryProvider>
+      <NewItineraryForm />
+    </CreateItineraryProvider>
   );
 }

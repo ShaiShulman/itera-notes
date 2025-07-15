@@ -1,26 +1,17 @@
-import { findPlaceByNameAction } from "../actions/places";
 import type { PlaceBlockData } from "../types";
 import { formatDrivingTimeAndDistance } from "../utils/formatting";
-
-// Add autocomplete types
-interface AutocompletePrediction {
-  place_id: string;
-  description: string;
-  structured_formatting: {
-    main_text: string;
-    secondary_text: string;
-  };
-}
+import {
+  attachAutocomplete,
+  AutocompleteInstance,
+  AutocompletePrediction,
+} from "@/features/autocomplete/autocomplete";
 
 export default class PlaceBlock {
   private data: PlaceBlockData;
   private wrapper: HTMLElement | null = null;
   private isExpanded: boolean = false;
   private imagePopover: HTMLElement | null = null;
-  private autocompleteDropdown: HTMLElement | null = null;
-  private autocompleteService: google.maps.places.AutocompleteService | null =
-    null;
-  private placesService: google.maps.places.PlacesService | null = null;
+  private autocompleteInstance: AutocompleteInstance | null = null;
 
   static get toolbox() {
     return {
@@ -52,24 +43,12 @@ export default class PlaceBlock {
       drivingDistanceFromPrevious: data?.drivingDistanceFromPrevious || 0,
     };
 
-    // Initialize Google Places services
-    this.initializeGoogleServices();
-
     // Listen for driving time updates
     if (typeof window !== "undefined") {
       window.addEventListener(
         "editor:updateDrivingTimes",
         this.handleDrivingTimeUpdate
       );
-    }
-  }
-
-  private initializeGoogleServices() {
-    if (typeof window !== "undefined" && window.google?.maps?.places) {
-      this.autocompleteService = new google.maps.places.AutocompleteService();
-      // Create a dummy div for PlacesService (required by Google Maps API)
-      const dummyDiv = document.createElement("div");
-      this.placesService = new google.maps.places.PlacesService(dummyDiv);
     }
   }
 
@@ -93,6 +72,141 @@ export default class PlaceBlock {
       );
     }
   };
+
+  // Calculate location bias for autocomplete based on other places in the day
+  private calculateLocationBias() {
+    const editorElement = this.wrapper?.closest(".codex-editor");
+    if (!editorElement) return undefined;
+
+    const dayPlaces: { lat: number; lng: number }[] = [];
+    const allBlocks = editorElement.querySelectorAll(".ce-block");
+
+    // Find all place blocks in the current day
+    let currentDayFound = false;
+    for (let i = 0; i < allBlocks.length; i++) {
+      const block = allBlocks[i];
+
+      // Check if this block contains a day block (reset for new day)
+      if (block.querySelector(".day-block")) {
+        currentDayFound = false;
+        dayPlaces.length = 0; // Reset for new day
+      }
+
+      // Check if this block contains our place block
+      if (block.contains(this.wrapper)) {
+        currentDayFound = true;
+      }
+
+      // If we're in the current day, collect place coordinates
+      if (currentDayFound || block.contains(this.wrapper)) {
+        const placeBlock = block.querySelector(".place-block") as HTMLElement;
+        if (placeBlock && placeBlock !== this.wrapper) {
+          // Try to find the place data - this is a simple approximation
+          // In a real implementation, you'd have access to the editor's data
+          const lat = parseFloat(placeBlock.dataset.lat || "0");
+          const lng = parseFloat(placeBlock.dataset.lng || "0");
+          if (lat && lng) {
+            dayPlaces.push({ lat, lng });
+          }
+        }
+      }
+    }
+
+    // If we have places in the day, calculate the center and radius
+    if (dayPlaces.length > 0) {
+      const centerLat =
+        dayPlaces.reduce((sum, p) => sum + p.lat, 0) / dayPlaces.length;
+      const centerLng =
+        dayPlaces.reduce((sum, p) => sum + p.lng, 0) / dayPlaces.length;
+
+      // Calculate radius as distance to furthest point + buffer
+      let maxDistance = 0;
+      dayPlaces.forEach((place) => {
+        const distance =
+          Math.sqrt(
+            Math.pow(place.lat - centerLat, 2) +
+              Math.pow(place.lng - centerLng, 2)
+          ) * 111320; // Rough conversion to meters
+        maxDistance = Math.max(maxDistance, distance);
+      });
+
+      return {
+        lat: centerLat,
+        lng: centerLng,
+        radius: Math.max(maxDistance + 5000, 10000), // At least 10km radius
+      };
+    }
+
+    return undefined;
+  }
+
+  // Handle autocomplete selection
+  private handleAutocompleteSelection(
+    prediction: AutocompletePrediction,
+    statusIndicator: HTMLElement
+  ) {
+    this.data.status = "loading";
+    this.updateStatusIndicator(statusIndicator, "loading");
+
+    // Extract place details from the prediction
+    const placeDetails = (prediction as any).place_details;
+    console.log("Place details:", placeDetails);
+    console.log("Photos:", placeDetails?.photos);
+
+    if (placeDetails) {
+      // Use the detailed place information
+      this.data = {
+        ...this.data,
+        placeId: prediction.place_id,
+        name: placeDetails.name || prediction.structured_formatting.main_text,
+        address: placeDetails.formatted_address || "",
+        lat: placeDetails.geometry?.location?.lat() || 0,
+        lng: placeDetails.geometry?.location?.lng() || 0,
+        rating: placeDetails.rating || 0,
+        photoReferences:
+          placeDetails.photos
+            ?.map((photo: any) => {
+              console.log("Photo object:", photo);
+              // Google Places API returns PlacePhoto objects with getUrl() method
+              if (photo.getUrl) {
+                return photo.getUrl({ maxWidth: 400 });
+              }
+              // Fallback for other formats
+              return "";
+            })
+            .filter(Boolean) || [],
+        description: placeDetails.editorial_summary?.overview || "",
+        thumbnailUrl: placeDetails.photos?.[0]?.getUrl
+          ? placeDetails.photos[0].getUrl({ maxWidth: 100 })
+          : "",
+        status: "found",
+      };
+    } else {
+      // Use basic prediction information
+      this.data = {
+        ...this.data,
+        placeId: prediction.place_id,
+        name: prediction.structured_formatting.main_text,
+        address: prediction.structured_formatting.secondary_text || "",
+        status: "found",
+      };
+    }
+
+    this.updateStatusIndicator(statusIndicator, "found");
+
+    // Auto-collapse after successful selection
+    setTimeout(() => {
+      this.renderCollapsed(false);
+    }, 500);
+  }
+
+  // Cleanup method to destroy autocomplete instance
+  private cleanupAutocomplete() {
+    if (this.autocompleteInstance) {
+      this.autocompleteInstance.destroy();
+      this.autocompleteInstance = null;
+    }
+  }
 
   render() {
     this.wrapper = document.createElement("div");
@@ -181,6 +295,11 @@ export default class PlaceBlock {
 
   private renderCollapsed(isEditing: boolean = false) {
     if (!this.wrapper) return;
+
+    // Clean up existing autocomplete instance when switching modes
+    if (!isEditing) {
+      this.cleanupAutocomplete();
+    }
 
     this.wrapper.innerHTML = "";
     this.wrapper.style.padding = "12px 16px";
@@ -286,195 +405,33 @@ export default class PlaceBlock {
         transition: border-color 0.2s;
       `;
 
-      // Create autocomplete dropdown
-      this.autocompleteDropdown = document.createElement("div");
-      this.autocompleteDropdown.style.cssText = `
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        background: white;
-        border: 2px solid #10b981;
-        border-top: none;
-        border-radius: 0 0 6px 6px;
-        max-height: 200px;
-        overflow-y: auto;
-        z-index: 1000;
-        display: none;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      `;
+      // Setup autocomplete with new module
+      const locationBias = this.calculateLocationBias();
 
-      let searchTimeout: NodeJS.Timeout;
-      let currentPredictions: AutocompletePrediction[] = [];
+      this.autocompleteInstance = attachAutocomplete(placeInput, {
+        type: "place",
+        locationBias,
+        onSelect: (prediction) => {
+          this.handleAutocompleteSelection(prediction, statusIndicator);
+        },
+        onFreeText: (text) => {
+          this.data.name = text;
+          this.data.status = "free-text";
+          this.updateStatusIndicator(statusIndicator, "free-text");
+          this.renderCollapsed(false);
+        },
+        placeholder: 'Enter place name (e.g., "Tokyo Skytree")',
+        minLength: 2,
+        maxResults: 6,
+      });
 
-      const searchAutocomplete = async (input: string) => {
-        if (!this.autocompleteService || input.length < 2) {
-          this.hideAutocompleteDropdown();
-          return;
-        }
-
-        try {
-          const request = {
-            input: input,
-            types: ["establishment", "geocode"],
-          };
-
-          this.autocompleteService.getPlacePredictions(
-            request,
-            (predictions, status) => {
-              if (
-                status === google.maps.places.PlacesServiceStatus.OK &&
-                predictions
-              ) {
-                currentPredictions = predictions.map((p) => ({
-                  place_id: p.place_id,
-                  description: p.description,
-                  structured_formatting: {
-                    main_text:
-                      p.structured_formatting?.main_text || p.description,
-                    secondary_text:
-                      p.structured_formatting?.secondary_text || "",
-                  },
-                }));
-                this.showAutocompleteDropdown(currentPredictions, placeInput);
-              } else {
-                this.hideAutocompleteDropdown();
-              }
-            }
-          );
-        } catch (error) {
-          console.error("Autocomplete error:", error);
-          this.hideAutocompleteDropdown();
-        }
-      };
-
-      const searchFallback = async (
-        placeName: string,
-        indicator: HTMLElement
-      ) => {
-        if (!placeName.trim()) {
-          this.data.status = "idle";
-          this.updateStatusIndicator(indicator, "idle");
-          return;
-        }
-
-        this.data.status = "loading";
-        this.updateStatusIndicator(indicator, "loading");
-
-        try {
-          const result = await findPlaceByNameAction(placeName);
-
-          if (result.success && result.place) {
-            this.data = {
-              ...this.data,
-              placeId: result.place.placeId,
-              name: result.place.name,
-              address: result.place.address,
-              lat: result.place.lat,
-              lng: result.place.lng,
-              rating: result.place.rating,
-              photoReferences: result.place.photoReferences,
-              description: result.place.description,
-              thumbnailUrl: result.place.thumbnailUrl,
-              status: "found",
-            };
-
-            this.updateStatusIndicator(indicator, "found");
-
-            // Auto-collapse after successful validation
-            setTimeout(() => {
-              this.renderCollapsed(false);
-            }, 500);
-          } else {
-            // Allow free text entry - don't show error, just mark as free text
-            this.data.name = placeName;
-            this.data.status = "free-text";
-            this.updateStatusIndicator(indicator, "free-text");
-          }
-        } catch (error) {
-          console.error("Search error:", error);
-          // Allow free text entry even on error
-          this.data.name = placeName;
-          this.data.status = "error";
-          this.updateStatusIndicator(indicator, "error");
-        }
-      };
-
-      // Handle input events
+      // The new autocomplete module handles all input events internally
+      // We just need to track input changes for our data
       placeInput.addEventListener("input", (e) => {
-        const inputValue = (e.target as HTMLInputElement).value;
-        this.data.name = inputValue;
-
-        if (searchTimeout) {
-          clearTimeout(searchTimeout);
-        }
-
-        if (inputValue.length < 2) {
-          this.data.status = "idle";
-          this.updateStatusIndicator(statusIndicator, "idle");
-          this.hideAutocompleteDropdown();
-          return;
-        }
-
-        // Show autocomplete suggestions
-        searchTimeout = setTimeout(() => {
-          searchAutocomplete(inputValue);
-        }, 300);
-      });
-
-      // Handle keyboard navigation
-      placeInput.addEventListener("keydown", (e) => {
-        e.stopPropagation();
-
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          this.navigateAutocomplete("down");
-        } else if (e.key === "ArrowUp") {
-          e.preventDefault();
-          this.navigateAutocomplete("up");
-        } else if (e.key === "Enter") {
-          e.preventDefault();
-          const selectedItem = this.autocompleteDropdown?.querySelector(
-            ".autocomplete-item.selected"
-          ) as HTMLElement;
-          if (selectedItem) {
-            const placeId = selectedItem.dataset.placeId;
-            const prediction = currentPredictions.find(
-              (p) => p.place_id === placeId
-            );
-            if (prediction) {
-              this.selectAutocompleteItem(prediction, placeInput);
-            }
-          } else {
-            // No selection, use fallback search or free text
-            const value = (e.target as HTMLInputElement).value || "";
-            if (searchTimeout) {
-              clearTimeout(searchTimeout);
-            }
-            this.hideAutocompleteDropdown();
-            searchFallback(value, statusIndicator);
-          }
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          this.hideAutocompleteDropdown();
-          if (this.data.placeId && this.data.name) {
-            this.renderCollapsed(false);
-          }
-        }
-      });
-
-      // Handle focus loss
-      placeInput.addEventListener("blur", () => {
-        // Delay hiding dropdown to allow for clicks
-        setTimeout(() => {
-          this.hideAutocompleteDropdown();
-        }, 200);
+        this.data.name = (e.target as HTMLInputElement).value;
       });
 
       inputContainer.appendChild(placeInput);
-      if (this.autocompleteDropdown) {
-        inputContainer.appendChild(this.autocompleteDropdown);
-      }
       nameContainer.appendChild(inputContainer);
 
       // Focus the input
@@ -865,10 +822,8 @@ export default class PlaceBlock {
         `;
 
         const image = document.createElement("img");
-        // Construct Google Places Photo API URL
-        image.src = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${photoRef}&key=${
-          process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "YOUR_API_KEY"
-        }`;
+        // Use the URL directly from photoReferences (already processed by getUrl())
+        image.src = photoRef;
         image.style.cssText = `
           width: 100%;
           height: 100%;
@@ -1134,226 +1089,6 @@ export default class PlaceBlock {
     this.wrapper.appendChild(saveButtonContainer);
   }
 
-  private showAutocompleteDropdown(
-    predictions: AutocompletePrediction[],
-    input: HTMLInputElement
-  ) {
-    if (!this.autocompleteDropdown) return;
-
-    this.autocompleteDropdown.innerHTML = "";
-
-    predictions.forEach((prediction) => {
-      const item = document.createElement("div");
-      item.className = "autocomplete-item";
-      item.dataset.placeId = prediction.place_id;
-      item.style.cssText = `
-        padding: 10px 12px;
-        border-bottom: 1px solid #e5e7eb;
-        cursor: pointer;
-        transition: background-color 0.2s;
-      `;
-
-      const mainText = document.createElement("div");
-      mainText.style.cssText = `
-        font-weight: 500;
-        color: #065f46;
-        font-size: 14px;
-      `;
-      mainText.textContent = prediction.structured_formatting.main_text;
-
-      const secondaryText = document.createElement("div");
-      secondaryText.style.cssText = `
-        font-size: 12px;
-        color: #6b7280;
-        margin-top: 2px;
-      `;
-      secondaryText.textContent =
-        prediction.structured_formatting.secondary_text;
-
-      item.appendChild(mainText);
-      if (prediction.structured_formatting.secondary_text) {
-        item.appendChild(secondaryText);
-      }
-
-      // Add hover effects
-      item.addEventListener("mouseenter", () => {
-        item.style.backgroundColor = "#f0f9ff";
-        // Remove selected class from other items
-        this.autocompleteDropdown
-          ?.querySelectorAll(".autocomplete-item")
-          .forEach((el) => {
-            el.classList.remove("selected");
-          });
-        item.classList.add("selected");
-      });
-
-      item.addEventListener("mouseleave", () => {
-        item.style.backgroundColor = "white";
-      });
-
-      // Handle click selection
-      item.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.selectAutocompleteItem(prediction, input);
-      });
-
-      this.autocompleteDropdown?.appendChild(item);
-    });
-
-    // Add "Use as free text" option
-    const freeTextItem = document.createElement("div");
-    freeTextItem.className = "autocomplete-item";
-    freeTextItem.style.cssText = `
-      padding: 10px 12px;
-      cursor: pointer;
-      transition: background-color 0.2s;
-      border-top: 1px solid #e5e7eb;
-      font-style: italic;
-      color: #6b7280;
-    `;
-    freeTextItem.textContent = `Use "${input.value}" as free text`;
-
-    freeTextItem.addEventListener("mouseenter", () => {
-      freeTextItem.style.backgroundColor = "#f9fafb";
-    });
-
-    freeTextItem.addEventListener("mouseleave", () => {
-      freeTextItem.style.backgroundColor = "white";
-    });
-
-    freeTextItem.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this.data.name = input.value;
-      this.data.status = "free-text";
-      this.hideAutocompleteDropdown();
-      this.renderCollapsed(false);
-    });
-
-    this.autocompleteDropdown.appendChild(freeTextItem);
-    this.autocompleteDropdown.style.display = "block";
-  }
-
-  private hideAutocompleteDropdown() {
-    if (this.autocompleteDropdown) {
-      this.autocompleteDropdown.style.display = "none";
-      this.autocompleteDropdown.innerHTML = "";
-    }
-  }
-
-  private navigateAutocomplete(direction: "up" | "down") {
-    if (!this.autocompleteDropdown) return;
-
-    const items =
-      this.autocompleteDropdown.querySelectorAll(".autocomplete-item");
-    const currentSelected = this.autocompleteDropdown.querySelector(
-      ".autocomplete-item.selected"
-    );
-
-    let newIndex = -1;
-
-    if (currentSelected) {
-      const currentIndex = Array.from(items).indexOf(currentSelected);
-      newIndex = direction === "down" ? currentIndex + 1 : currentIndex - 1;
-    } else {
-      newIndex = direction === "down" ? 0 : items.length - 1;
-    }
-
-    // Wrap around
-    if (newIndex < 0) newIndex = items.length - 1;
-    if (newIndex >= items.length) newIndex = 0;
-
-    // Remove previous selection
-    items.forEach((item) => item.classList.remove("selected"));
-
-    // Add new selection
-    if (items[newIndex]) {
-      items[newIndex].classList.add("selected");
-      (items[newIndex] as HTMLElement).style.backgroundColor = "#f0f9ff";
-    }
-  }
-
-  private async selectAutocompleteItem(
-    prediction: AutocompletePrediction,
-    input: HTMLInputElement
-  ) {
-    if (!this.placesService) return;
-
-    this.hideAutocompleteDropdown();
-    this.data.status = "loading";
-
-    // Update input value immediately
-    input.value = prediction.structured_formatting.main_text;
-    this.data.name = prediction.structured_formatting.main_text;
-
-    const statusIndicator = this.wrapper?.querySelector(
-      'div[style*="width: 20px"]'
-    ) as HTMLElement;
-    if (statusIndicator) {
-      this.updateStatusIndicator(statusIndicator, "loading");
-    }
-
-    try {
-      const request = {
-        placeId: prediction.place_id,
-        fields: [
-          "place_id",
-          "name",
-          "formatted_address",
-          "geometry",
-          "rating",
-          "photos",
-          "editorial_summary",
-          "types",
-        ],
-      };
-
-      this.placesService.getDetails(request, (place, status) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK && place) {
-          this.data = {
-            ...this.data,
-            placeId: place.place_id || "",
-            name: place.name || prediction.structured_formatting.main_text,
-            address: place.formatted_address || "",
-            lat: place.geometry?.location?.lat() || 0,
-            lng: place.geometry?.location?.lng() || 0,
-            rating: place.rating || 0,
-            photoReferences:
-              place.photos?.map((photo) => photo.getUrl({ maxWidth: 400 })) ||
-              [],
-            description: (place as any).editorial_summary?.overview || "",
-            thumbnailUrl: place.photos?.[0]?.getUrl({ maxWidth: 100 }) || "",
-            status: "found",
-          };
-
-          if (statusIndicator) {
-            this.updateStatusIndicator(statusIndicator, "found");
-          }
-
-          // Auto-collapse after successful validation
-          setTimeout(() => {
-            this.renderCollapsed(false);
-          }, 500);
-        } else {
-          console.error("Place details error:", status);
-          // Fall back to free text
-          this.data.name = prediction.structured_formatting.main_text;
-          this.data.status = "free-text";
-          if (statusIndicator) {
-            this.updateStatusIndicator(statusIndicator, "free-text");
-          }
-        }
-      });
-    } catch (error) {
-      console.error("Place details error:", error);
-      // Fall back to free text
-      this.data.name = prediction.structured_formatting.main_text;
-      this.data.status = "free-text";
-      if (statusIndicator) {
-        this.updateStatusIndicator(statusIndicator, "free-text");
-      }
-    }
-  }
-
   private updateStatusIndicator(indicator: HTMLElement, status: string) {
     switch (status) {
       case "loading":
@@ -1463,9 +1198,8 @@ export default class PlaceBlock {
 
     // Create larger image
     const largeImage = document.createElement("img");
-    largeImage.src = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photoRef}&key=${
-      process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "YOUR_API_KEY"
-    }`;
+    // Use the URL directly from photoReferences (already processed by getUrl())
+    largeImage.src = photoRef;
     largeImage.style.cssText = `
       width: auto;
       height: auto;
