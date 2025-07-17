@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Loader } from "@googlemaps/js-api-loader";
 import { MapProps, MapPlace, GoogleMapInstance } from "../types";
 import {
@@ -9,17 +9,19 @@ import {
   getDayColor,
 } from "../utils/colors";
 import { DirectionsPolyRenderer } from "../../directions/directionsPolyRenderer";
+import {
+  getPlaceDetailsAction,
+  getPlacePhotoUrl,
+} from "@/features/editor/actions/places";
+import { PlaceLocation } from "@/services/openai/itinerary";
+import { useItinerary } from "@/contexts/ItineraryContext";
+import { AddPlacePopup } from "./AddPlacePopup";
+import { PlacePopupState } from "./types";
+import { defaultMapOptions } from "./mapSettings";
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 const DEFAULT_CENTER = { lat: 40.7128, lng: -74.006 }; // New York City default
 const FOCUSED_ZOOM_LEVEL = 10;
-
-// Debug logging
-console.log(
-  "Google Maps API Key:",
-  GOOGLE_MAPS_API_KEY ? "✓ Set" : "✗ Missing"
-);
-console.log("Environment:", process.env.NODE_ENV);
 
 export function GoogleMap({
   data,
@@ -34,6 +36,9 @@ export function GoogleMap({
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<GoogleMapInstance | null>(null);
   const directionsRendererRef = useRef<DirectionsPolyRenderer | null>(null);
+  const placesServiceRef = useRef<google.maps.places.PlacesService | null>(
+    null
+  );
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mapContainer, setMapContainer] = useState<HTMLDivElement | null>(null);
@@ -42,6 +47,16 @@ export function GoogleMap({
     useState<google.maps.LatLngBounds | null>(null);
   const [selectedMarker, setSelectedMarker] =
     useState<google.maps.Marker | null>(null);
+  const [placePopup, setPlacePopup] = useState<PlacePopupState>({
+    isOpen: false,
+    position: null,
+    placeName: "",
+    placeData: null,
+    isLoading: false,
+  });
+
+  // Get the itinerary context at the component level
+  const { addPlace } = useItinerary();
 
   console.log("GoogleMap state - isLoaded:", isLoaded, "error:", error);
 
@@ -50,6 +65,17 @@ export function GoogleMap({
     mapRef.current = node;
     setMapContainer(node);
     console.log("Map container ref set:", !!node);
+  }, []);
+
+  // Close popup when clicking outside
+  const closePopup = useCallback(() => {
+    setPlacePopup({
+      isOpen: false,
+      position: null,
+      placeName: "",
+      placeData: null,
+      isLoading: false,
+    });
   }, []);
 
   // Initialize Google Maps when container is available
@@ -113,24 +139,8 @@ export function GoogleMap({
         const map = new google.maps.Map(mapContainer, {
           center,
           zoom,
-          mapTypeId: google.maps.MapTypeId.ROADMAP,
-          disableDefaultUI: false,
-          zoomControl: true,
-          mapTypeControl: false,
-          scaleControl: true,
-          streetViewControl: false,
-          rotateControl: false,
-          fullscreenControl: true,
-          styles: [
-            {
-              featureType: "poi",
-              elementType: "labels",
-              stylers: [{ visibility: "off" }],
-            },
-          ],
+          ...defaultMapOptions,
         });
-
-        console.log("Map created successfully!");
 
         mapInstanceRef.current = {
           map,
@@ -138,17 +148,79 @@ export function GoogleMap({
           directionsRenderers: [],
         };
 
-        // Initialize directions polyline renderer
         directionsRendererRef.current = new DirectionsPolyRenderer(map);
+        placesServiceRef.current = new google.maps.places.PlacesService(map);
 
-        // Add map click handler to deselect places
-        map.addListener("click", () => {
-          console.log("📍 Map clicked - deselecting places");
-          if (onPlaceClick) {
-            // Call with a special marker to indicate deselection
-            onPlaceClick(null as any);
+        // POI click handler - triggers only when clicking on Google Maps POIs
+        map.addListener(
+          "click",
+          (event: google.maps.MapMouseEvent & { placeId?: string }) => {
+            console.log("📍 Map clicked:", event);
+
+            // Close any existing popup first
+            closePopup();
+
+            // Check if click was on a POI (point of interest)
+            if (event.placeId) {
+              console.log("📍 Clicked on POI with place_id:", event.placeId);
+
+              // Prevent default POI info window
+              event.stop?.();
+
+              // Get place details using the place_id
+              if (placesServiceRef.current) {
+                const request = {
+                  placeId: event.placeId,
+                  fields: [
+                    "name",
+                    "formatted_address",
+                    "geometry",
+                    "rating",
+                    "photos",
+                    "editorial_summary",
+                  ],
+                };
+
+                placesServiceRef.current.getDetails(
+                  request,
+                  (place, status) => {
+                    if (
+                      status === google.maps.places.PlacesServiceStatus.OK &&
+                      place
+                    ) {
+                      console.log("📍 Found POI details:", place.name);
+
+                      // Show popup with loading state
+                      setPlacePopup({
+                        isOpen: true,
+                        position: event.latLng!.toJSON(),
+                        placeName: place.name || "Unknown Place",
+                        placeData: null,
+                        isLoading: true,
+                      });
+
+                      // Fetch detailed place information using placeId
+                      fetchPlaceDetails(
+                        event.placeId!,
+                        place.name || "Unknown Place"
+                      );
+                    } else {
+                      console.log("📍 Could not get POI details");
+                    }
+                  }
+                );
+              }
+            } else {
+              console.log(
+                "📍 Regular map click - deselecting any selected places"
+              );
+              // If no POI clicked, deselect any selected places
+              if (onPlaceClick) {
+                onPlaceClick(null as any);
+              }
+            }
           }
-        });
+        );
 
         setIsLoaded(true);
         onMapReady?.(map);
@@ -177,7 +249,97 @@ export function GoogleMap({
         directionsRendererRef.current = null;
       }
     };
-  }, [mapContainer, onMapReady]);
+  }, [mapContainer, onMapReady, closePopup]);
+
+  // Function to fetch place details using placeId
+  const fetchPlaceDetails = async (placeId: string, placeName: string) => {
+    try {
+      console.log(
+        "🔍 Fetching place details for placeId:",
+        placeId,
+        "name:",
+        placeName
+      );
+
+      const placeDetails = await getPlaceDetailsAction(placeId);
+
+      if (placeDetails) {
+        console.log("✅ Place details found:", placeDetails.name);
+
+        // Convert photo references to proper URLs
+        const photoReferences = await Promise.all(
+          (placeDetails.photos || [])
+            .slice(0, 4)
+            .map(
+              async (photo) =>
+                await getPlacePhotoUrl(photo.photo_reference, 400)
+            )
+        );
+
+        // Get thumbnail URL for first photo
+        const thumbnailUrl =
+          placeDetails.photos && placeDetails.photos.length > 0
+            ? await getPlacePhotoUrl(
+                placeDetails.photos[0].photo_reference,
+                150
+              )
+            : undefined;
+
+        const placeData: PlaceLocation = {
+          name: placeDetails.name,
+          lat: placeDetails.geometry.location.lat,
+          lng: placeDetails.geometry.location.lng,
+          placeId: placeDetails.place_id,
+          address: placeDetails.formatted_address,
+          rating: placeDetails.rating,
+          photoReferences,
+          description: placeDetails.editorial_summary?.overview,
+          thumbnailUrl,
+          status: "found",
+        };
+
+        setPlacePopup((prev) => ({
+          ...prev,
+          placeData,
+          isLoading: false,
+        }));
+      } else {
+        console.log("⚠️ Place details not found, keeping as free text");
+
+        // Create a basic place object for free text
+        const placeData: PlaceLocation = {
+          name: placeName,
+          lat: placePopup.position?.lat || 0,
+          lng: placePopup.position?.lng || 0,
+          placeId: placeId,
+          status: "free-text",
+        };
+
+        setPlacePopup((prev) => ({
+          ...prev,
+          placeData,
+          isLoading: false,
+        }));
+      }
+    } catch (error) {
+      console.error("❌ Error fetching place details:", error);
+
+      // Create error state place object
+      const placeData: PlaceLocation = {
+        name: placeName,
+        lat: placePopup.position?.lat || 0,
+        lng: placePopup.position?.lng || 0,
+        placeId: placeId,
+        status: "error",
+      };
+
+      setPlacePopup((prev) => ({
+        ...prev,
+        placeData,
+        isLoading: false,
+      }));
+    }
+  };
 
   console.log(
     "About to render GoogleMap, isLoaded:",
@@ -528,6 +690,41 @@ export function GoogleMap({
             <p className="text-sm text-slate-500">
               Start adding places to your itinerary to see them on the map
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Add Place Popup */}
+      {placePopup.isOpen && placePopup.position && (
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            pointerEvents: "none",
+          }}
+        >
+          <div className="relative pointer-events-auto">
+            <AddPlacePopup
+              isOpen={placePopup.isOpen}
+              position={placePopup.position}
+              placeName={placePopup.placeName}
+              placeData={placePopup.placeData}
+              isLoading={placePopup.isLoading}
+              onClose={closePopup}
+              onAddToDay={(dayNumber, place) => {
+                console.log(
+                  `🗺️ GoogleMap: Adding place to Day ${dayNumber}:`,
+                  place
+                );
+
+                // Use the ItineraryContext to add the place
+                addPlace(dayNumber, place);
+
+                closePopup();
+              }}
+            />
           </div>
         </div>
       )}

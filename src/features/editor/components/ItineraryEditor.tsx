@@ -17,6 +17,7 @@ import {
 } from "@/services/google/directions";
 import { getDayColor } from "@/features/map/utils/colors";
 import { useItinerary } from "@/contexts/ItineraryContext";
+import { PlaceLocation } from "@/services/openai/itinerary";
 import HeaderBlock from "@editorjs/header";
 import ParagraphBlock from "@editorjs/paragraph";
 import "./editorjs-global.css";
@@ -172,8 +173,76 @@ export default function ItineraryEditor({
   const holderRef = useRef<HTMLDivElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { setSelectedPlace, state } = useItinerary();
+  const { setSelectedPlace, state, updateDay } = useItinerary();
   const { selectedPlace } = state;
+
+  // Function to sync editor deletions back to context
+  const syncEditorDeletionsToContext = useCallback(
+    async (editorData: EditorData) => {
+      if (!state.currentItinerary) return;
+
+      try {
+        const blocks = editorData.blocks || [];
+
+        // Extract places from editor grouped by day
+        const editorPlacesByDay: { [dayNumber: number]: PlaceLocation[] } = {};
+        let currentDay = 0;
+
+        blocks.forEach((block) => {
+          if (block.type === "day") {
+            currentDay = (block.data as any).dayNumber || currentDay + 1;
+            if (!editorPlacesByDay[currentDay]) {
+              editorPlacesByDay[currentDay] = [];
+            }
+          } else if (
+            (block.type === "place" || block.type === "hotel") &&
+            currentDay > 0
+          ) {
+            const blockData = block.data as any;
+            if (blockData.name && blockData.lat && blockData.lng) {
+              editorPlacesByDay[currentDay].push({
+                name: blockData.name,
+                lat: blockData.lat,
+                lng: blockData.lng,
+                placeId: blockData.placeId,
+                address: blockData.address,
+                rating: blockData.rating,
+                photoReferences: blockData.photoReferences,
+                description: blockData.description,
+                thumbnailUrl: blockData.thumbnailUrl,
+                status: blockData.status || "found",
+              });
+            }
+          }
+        });
+
+        // Update context for each day if places have changed
+        state.currentItinerary.days.forEach((day) => {
+          const dayNumber = day.dayNumber;
+          const editorPlaces = editorPlacesByDay[dayNumber] || [];
+
+          // Compare places by name (simple comparison)
+          const contextPlaceNames = day.places.map((p) => p.name).sort();
+          const editorPlaceNames = editorPlaces.map((p) => p.name).sort();
+
+          if (
+            JSON.stringify(contextPlaceNames) !==
+            JSON.stringify(editorPlaceNames)
+          ) {
+            console.log(
+              `📝 Syncing places for day ${dayNumber}: editor has ${editorPlaces.length}, context has ${day.places.length}`
+            );
+
+            // Update the day with the current editor places
+            updateDay(dayNumber, { places: editorPlaces });
+          }
+        });
+      } catch (error) {
+        console.error("Error syncing editor deletions to context:", error);
+      }
+    },
+    [state.currentItinerary, updateDay]
+  );
 
   // Function to find and expand a place block by uid
   const findAndExpandPlace = useCallback((uid: string) => {
@@ -432,6 +501,12 @@ export default function ItineraryEditor({
               try {
                 const outputData = await editorRef.current.save();
                 onChange(outputData);
+
+                // Sync editor deletions back to context with a small delay
+                // This prevents deleted places from being re-added
+                setTimeout(() => {
+                  syncEditorDeletionsToContext(outputData);
+                }, 100);
               } catch (error) {
                 console.error("ItineraryEditor: Error saving data:", error);
               }
@@ -448,7 +523,8 @@ export default function ItineraryEditor({
 
             // Add event listener for day block requests to add new blocks
             const handleAddBlockRequest = (event: CustomEvent) => {
-              const { dayBlockElement, blockType, dayNumber } = event.detail;
+              const { dayBlockElement, blockType, dayNumber, initialData } =
+                event.detail;
               console.log(
                 `ItineraryEditor: Request to add ${blockType} after day ${dayNumber}`
               );
@@ -465,22 +541,23 @@ export default function ItineraryEditor({
                 );
 
                 if (insertionIndex >= 0) {
-                  // Insert the new block at the calculated position
+                  // Insert the new block at the calculated position with initial data
                   editorRef.current.blocks.insert(
                     blockType,
-                    {},
+                    initialData || {},
                     {},
                     insertionIndex
                   );
                   console.log(
-                    `ItineraryEditor: Inserted ${blockType} at index ${insertionIndex}`
+                    `ItineraryEditor: Inserted ${blockType} at index ${insertionIndex} with data:`,
+                    initialData
                   );
                 } else {
                   // Fallback: insert at the end
                   console.log(
                     `ItineraryEditor: Fallback - inserting ${blockType} at end`
                   );
-                  editorRef.current.blocks.insert(blockType);
+                  editorRef.current.blocks.insert(blockType, initialData || {});
                 }
               }
             };
@@ -538,6 +615,127 @@ export default function ItineraryEditor({
       }
     };
   }, [placeholder, readOnly]);
+
+  // Watch for changes in itinerary context and add new places to editor
+  useEffect(() => {
+    if (!isReady || !state.currentItinerary) return;
+
+    // Get current editor data to compare
+    if (editorRef.current) {
+      editorRef.current
+        .save()
+        .then((currentEditorData) => {
+          const currentBlocks = currentEditorData.blocks || [];
+
+          // Extract current places from editor by day
+          const editorPlacesByDay: { [dayNumber: number]: string[] } = {};
+          let currentDay = 0;
+
+          currentBlocks.forEach((block) => {
+            if (block.type === "day") {
+              currentDay = (block.data as any).dayNumber || currentDay + 1;
+              if (!editorPlacesByDay[currentDay]) {
+                editorPlacesByDay[currentDay] = [];
+              }
+            } else if (
+              (block.type === "place" || block.type === "hotel") &&
+              currentDay > 0
+            ) {
+              const placeName = (block.data as any).name;
+              if (placeName) {
+                editorPlacesByDay[currentDay].push(placeName);
+              }
+            }
+          });
+
+          // Compare with context places and find new ones
+          if (!state.currentItinerary) return;
+
+          state.currentItinerary.days.forEach((day) => {
+            const dayNumber = day.dayNumber;
+            const contextPlaces = day.places.map((p) => p.name);
+            const editorPlaces = editorPlacesByDay[dayNumber] || [];
+
+            // Find places that exist in context but not in editor
+            const newPlaces = contextPlaces.filter(
+              (placeName) => !editorPlaces.includes(placeName)
+            );
+
+            if (newPlaces.length > 0) {
+              console.log(
+                `📝 Found ${newPlaces.length} new places for day ${dayNumber}:`,
+                newPlaces
+              );
+
+              // Find the corresponding day block element
+              const dayBlocks =
+                holderRef.current?.querySelectorAll(".day-block");
+              let targetDayBlock: HTMLElement | null = null;
+
+              dayBlocks?.forEach((block) => {
+                const blockElement = block as HTMLElement;
+                // Check if this is the right day block
+                const dayData = blockElement.textContent?.includes(
+                  `Day ${dayNumber}`
+                );
+                if (dayData) {
+                  targetDayBlock = blockElement;
+                }
+              });
+
+              if (targetDayBlock) {
+                // Add each new place
+                newPlaces.forEach((placeName) => {
+                  const place = day.places.find((p) => p.name === placeName);
+                  if (place) {
+                    // Generate UID for the place
+                    const placeIndex = day.places.findIndex(
+                      (p) => p.name === placeName
+                    );
+                    const uid = `place_${dayNumber}_${placeIndex}`;
+
+                    // Create place data for editor
+                    const placeData = {
+                      name: place.name,
+                      lat: place.lat,
+                      lng: place.lng,
+                      uid: uid,
+                      placeId: place.placeId,
+                      address: place.address,
+                      rating: place.rating,
+                      photoReferences: place.photoReferences,
+                      description: place.description,
+                      thumbnailUrl: place.thumbnailUrl,
+                      status: place.status || "found",
+                      isExpanded: false, // Don't expand newly added places
+                    };
+
+                    console.log(
+                      `📝 Adding place to editor: ${placeName} with UID: ${uid}`
+                    );
+
+                    // Trigger the add block event
+                    const event = new CustomEvent("dayblock:addBlock", {
+                      detail: {
+                        dayBlockElement: targetDayBlock,
+                        blockType: "place",
+                        dayNumber: dayNumber,
+                        initialData: placeData,
+                      },
+                    });
+
+                    holderRef.current?.dispatchEvent(event);
+                  }
+                });
+              }
+            }
+          });
+        })
+        .catch((error) => {
+          console.error("Error comparing editor data with context:", error);
+        });
+    }
+  }, [state.currentItinerary, isReady]);
 
   // Expose refresh directions function to parent component
   useEffect(() => {
