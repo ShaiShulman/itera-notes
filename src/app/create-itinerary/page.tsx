@@ -124,8 +124,8 @@ function NewItineraryForm() {
         // Keep form data in localStorage for when user navigates back
         // Don't clear form data after successful generation
 
-        // Redirect to main editor page
-        router.push("/");
+        // Redirect to editor page
+        router.push("/editor");
       } else {
         setErrors({
           submit: actionResult.error || "Failed to generate itinerary",
@@ -382,9 +382,15 @@ function NewItineraryForm() {
                   errors.travelStyle ? "border-red-500" : "border-slate-300"
                 }`}
               >
-                <option value="">Select your travel style</option>
+                <option value="" className="text-black">
+                  Select your travel style
+                </option>
                 {TRAVEL_STYLES.map((style) => (
-                  <option key={style.value} value={style.value}>
+                  <option
+                    className="text-black"
+                    key={style.value}
+                    value={style.value}
+                  >
                     {style.label} - {style.description}
                   </option>
                 ))}

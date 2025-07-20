@@ -17,7 +17,7 @@ import { PlaceLocation } from "@/services/openai/itinerary";
 import { useItinerary } from "@/contexts/ItineraryContext";
 import { AddPlacePopup } from "./AddPlacePopup";
 import { PlacePopupState } from "./types";
-import { defaultMapOptions } from "./mapSettings";
+import { getDefaultMapOptions } from "./mapSettings";
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 const DEFAULT_CENTER = { lat: 40.7128, lng: -74.006 }; // New York City default
@@ -38,7 +38,7 @@ export function GoogleMap({
   const directionsRendererRef = useRef<DirectionsPolyRenderer | null>(null);
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(
     null
-  );
+  ); // TODO: replace with server side places services
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mapContainer, setMapContainer] = useState<HTMLDivElement | null>(null);
@@ -139,7 +139,7 @@ export function GoogleMap({
         const map = new google.maps.Map(mapContainer, {
           center,
           zoom,
-          ...defaultMapOptions,
+          ...getDefaultMapOptions(),
         });
 
         mapInstanceRef.current = {

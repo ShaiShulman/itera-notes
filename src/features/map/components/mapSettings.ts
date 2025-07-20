@@ -1,6 +1,6 @@
 // Google Maps configuration settings (excluding center and zoom)
 export interface MapConfiguration {
-  mapTypeId: google.maps.MapTypeId;
+  mapTypeId: any; // google.maps.MapTypeId
   disableDefaultUI: boolean;
   zoomControl: boolean;
   mapTypeControl: boolean;
@@ -8,11 +8,11 @@ export interface MapConfiguration {
   streetViewControl: boolean;
   rotateControl: boolean;
   fullscreenControl: boolean;
-  styles: google.maps.MapTypeStyle[];
+  styles: any[]; // google.maps.MapTypeStyle[]
 }
 
 // Tourist-friendly map styles
-export const touristMapStyles: google.maps.MapTypeStyle[] = [
+export const getTouristMapStyles = (): any[] => [
   // Hide less relevant POI categories for tourists
   {
     featureType: "poi.medical",
@@ -74,8 +74,8 @@ export const touristMapStyles: google.maps.MapTypeStyle[] = [
 ];
 
 // Default map options for the itinerary map (without center and zoom)
-export const defaultMapOptions: MapConfiguration = {
-  mapTypeId: google.maps.MapTypeId.ROADMAP,
+export const getDefaultMapOptions = (): MapConfiguration => ({
+  mapTypeId: google?.maps?.MapTypeId?.ROADMAP || "roadmap",
   disableDefaultUI: false,
   zoomControl: true,
   mapTypeControl: false,
@@ -83,5 +83,5 @@ export const defaultMapOptions: MapConfiguration = {
   streetViewControl: false,
   rotateControl: false,
   fullscreenControl: true,
-  styles: touristMapStyles,
-};
+  styles: getTouristMapStyles(),
+});

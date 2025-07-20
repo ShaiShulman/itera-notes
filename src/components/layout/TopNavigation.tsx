@@ -19,8 +19,8 @@ const navigationItems = [
     primary: true,
   },
   {
-    name: "Itinerary Planner",
-    href: "/",
+    name: "Itinerary Editor",
+    href: "/editor",
     icon: MapIcon,
   },
   {
