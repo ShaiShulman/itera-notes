@@ -36,9 +36,6 @@ export function GoogleMap({
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<GoogleMapInstance | null>(null);
   const directionsRendererRef = useRef<DirectionsPolyRenderer | null>(null);
-  const placesServiceRef = useRef<google.maps.places.PlacesService | null>(
-    null
-  ); // TODO: replace with server side places services
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mapContainer, setMapContainer] = useState<HTMLDivElement | null>(null);
@@ -149,7 +146,6 @@ export function GoogleMap({
         };
 
         directionsRendererRef.current = new DirectionsPolyRenderer(map);
-        placesServiceRef.current = new google.maps.places.PlacesService(map);
 
         // POI click handler - triggers only when clicking on Google Maps POIs
         map.addListener(
@@ -167,49 +163,17 @@ export function GoogleMap({
               // Prevent default POI info window
               event.stop?.();
 
-              // Get place details using the place_id
-              if (placesServiceRef.current) {
-                const request = {
-                  placeId: event.placeId,
-                  fields: [
-                    "name",
-                    "formatted_address",
-                    "geometry",
-                    "rating",
-                    "photos",
-                    "editorial_summary",
-                  ],
-                };
+              // Show popup with loading state immediately
+              setPlacePopup({
+                isOpen: true,
+                position: event.latLng!.toJSON(),
+                placeName: "Loading...",
+                placeData: null,
+                isLoading: true,
+              });
 
-                placesServiceRef.current.getDetails(
-                  request,
-                  (place, status) => {
-                    if (
-                      status === google.maps.places.PlacesServiceStatus.OK &&
-                      place
-                    ) {
-                      console.log("📍 Found POI details:", place.name);
-
-                      // Show popup with loading state
-                      setPlacePopup({
-                        isOpen: true,
-                        position: event.latLng!.toJSON(),
-                        placeName: place.name || "Unknown Place",
-                        placeData: null,
-                        isLoading: true,
-                      });
-
-                      // Fetch detailed place information using placeId
-                      fetchPlaceDetails(
-                        event.placeId!,
-                        place.name || "Unknown Place"
-                      );
-                    } else {
-                      console.log("📍 Could not get POI details");
-                    }
-                  }
-                );
-              }
+              // Fetch detailed place information using placeId with internal API
+              fetchPlaceDetails(event.placeId!, "");
             } else {
               console.log(
                 "📍 Regular map click - deselecting any selected places"
@@ -296,48 +260,38 @@ export function GoogleMap({
           description: placeDetails.editorial_summary?.overview,
           thumbnailUrl,
           status: "found",
+          type: placeDetails.types?.some(type => ['lodging', 'hotel', 'hostel', 'resort', 'motel', 'bed_and_breakfast', 'guest_house', 'apartment_complex'].includes(type)) ? "hotel" : "place",
         };
 
         setPlacePopup((prev) => ({
           ...prev,
+          placeName: placeDetails.name,
           placeData,
           isLoading: false,
         }));
       } else {
-        console.log("⚠️ Place details not found, keeping as free text");
+        console.log("⚠️ Place details not found");
 
-        // Create a basic place object for free text
-        const placeData: PlaceLocation = {
-          name: placeName,
-          lat: placePopup.position?.lat || 0,
-          lng: placePopup.position?.lng || 0,
-          placeId: placeId,
-          status: "free-text",
-        };
-
-        setPlacePopup((prev) => ({
-          ...prev,
-          placeData,
+        // Close popup and show error - place not found
+        setPlacePopup({
+          isOpen: false,
+          position: null,
+          placeName: "",
+          placeData: null,
           isLoading: false,
-        }));
+        });
       }
     } catch (error) {
       console.error("❌ Error fetching place details:", error);
 
-      // Create error state place object
-      const placeData: PlaceLocation = {
-        name: placeName,
-        lat: placePopup.position?.lat || 0,
-        lng: placePopup.position?.lng || 0,
-        placeId: placeId,
-        status: "error",
-      };
-
-      setPlacePopup((prev) => ({
-        ...prev,
-        placeData,
+      // Close popup on error
+      setPlacePopup({
+        isOpen: false,
+        position: null,
+        placeName: "",
+        placeData: null,
         isLoading: false,
-      }));
+      });
     }
   };
 

@@ -1,6 +1,6 @@
 "use server";
 
-import { googlePlacesService } from "@/services/google/places";
+import { googlePlacesService, isHotelPlace } from "@/services/google/places";
 import type { PlaceSearchResult, PlaceDetails } from "../types";
 
 export async function searchPlacesAction(
@@ -113,6 +113,7 @@ export async function findPlaceByNameAction(placeName: string): Promise<{
         photoReferences,
         description: placeDetails.editorial_summary?.overview,
         thumbnailUrl,
+        type: isHotelPlace(placeDetails.types) ? "hotel" : "place",
       },
     };
   } catch (error) {

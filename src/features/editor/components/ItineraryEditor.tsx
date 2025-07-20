@@ -718,7 +718,7 @@ export default function ItineraryEditor({
                     const event = new CustomEvent("dayblock:addBlock", {
                       detail: {
                         dayBlockElement: targetDayBlock,
-                        blockType: "place",
+                        blockType: place.type === "hotel" ? "hotel" : "place",
                         dayNumber: dayNumber,
                         initialData: placeData,
                       },

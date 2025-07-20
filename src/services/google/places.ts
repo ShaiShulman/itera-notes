@@ -173,5 +173,23 @@ class GooglePlacesService {
   }
 }
 
+/**
+ * Determine if a place is a hotel based on its Google Places API types
+ */
+export function isHotelPlace(types: string[]): boolean {
+  const hotelTypes = [
+    'lodging',
+    'hotel',
+    'hostel', 
+    'resort',
+    'motel',
+    'bed_and_breakfast',
+    'guest_house',
+    'apartment_complex'
+  ];
+  
+  return types.some(type => hotelTypes.includes(type));
+}
+
 export const googlePlacesService = new GooglePlacesService();
 export type { PlaceSearchResult, PlaceDetails };
