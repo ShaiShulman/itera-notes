@@ -1,5 +1,6 @@
 // Google Directions API service
 import { FallbackDirectionsService } from "./fallbackDirections";
+import { withDirectionsCache } from "./cacheWrappers";
 
 export interface DirectionsLeg {
   distance: {
@@ -109,14 +110,22 @@ export class GoogleDirectionsService {
       `🚗 DirectionsService: ${places.map((p) => p.name).join(" → ")}`
     );
 
-    try {
-      const response = await fetch(url);
+    // Use cache wrapper for the API call
+    const data = await withDirectionsCache(
+      places,
+      "driving",
+      async () => {
+        const response = await fetch(url);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return response.json();
       }
+    );
 
-      const data = await response.json();
+    try {
       const duration = Date.now() - startTime;
 
       if (data.status === "ZERO_RESULTS") {

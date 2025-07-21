@@ -1,4 +1,5 @@
 import { apiLogger } from "@/services/logging/apiLogger";
+import { withPlacesSearchCache, withPlaceDetailsCache } from "./cacheWrappers";
 
 interface PlaceSearchResult {
   place_id: string;
@@ -70,23 +71,25 @@ class GooglePlacesService {
 
   async searchPlaces(query: string): Promise<PlaceSearchResult[]> {
     try {
-      const response = await fetch(
-        `${this.baseUrl}/place/textsearch/json?query=${encodeURIComponent(
-          query
-        )}&key=${this.apiKey}`
-      );
+      return await withPlacesSearchCache(query, async () => {
+        const response = await fetch(
+          `${this.baseUrl}/place/textsearch/json?query=${encodeURIComponent(
+            query
+          )}&key=${this.apiKey}`
+        );
 
-      if (!response.ok) {
-        throw new Error(`Places API request failed: ${response.statusText}`);
-      }
+        if (!response.ok) {
+          throw new Error(`Places API request failed: ${response.statusText}`);
+        }
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (data.status !== "OK") {
-        throw new Error(`Places API error: ${data.status}`);
-      }
+        if (data.status !== "OK") {
+          throw new Error(`Places API error: ${data.status}`);
+        }
 
-      return data.results || [];
+        return data.results || [];
+      });
     } catch (error) {
       console.error("Error searching places:", error);
       throw error;
@@ -130,38 +133,40 @@ class GooglePlacesService {
 
   async getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
     try {
-      const fields = [
-        "place_id",
-        "name",
-        "formatted_address",
-        "formatted_phone_number",
-        "international_phone_number",
-        "website",
-        "rating",
-        "price_level",
-        "user_ratings_total",
-        "geometry",
-        "photos",
-        "opening_hours",
-        "types",
-        "editorial_summary",
-      ].join(",");
+      return await withPlaceDetailsCache(placeId, async () => {
+        const fields = [
+          "place_id",
+          "name",
+          "formatted_address",
+          "formatted_phone_number",
+          "international_phone_number",
+          "website",
+          "rating",
+          "price_level",
+          "user_ratings_total",
+          "geometry",
+          "photos",
+          "opening_hours",
+          "types",
+          "editorial_summary",
+        ].join(",");
 
-      const response = await fetch(
-        `${this.baseUrl}/place/details/json?place_id=${placeId}&fields=${fields}&key=${this.apiKey}`
-      );
+        const response = await fetch(
+          `${this.baseUrl}/place/details/json?place_id=${placeId}&fields=${fields}&key=${this.apiKey}`
+        );
 
-      if (!response.ok) {
-        throw new Error(`Place details request failed: ${response.statusText}`);
-      }
+        if (!response.ok) {
+          throw new Error(`Place details request failed: ${response.statusText}`);
+        }
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (data.status !== "OK") {
-        throw new Error(`Place details API error: ${data.status}`);
-      }
+        if (data.status !== "OK") {
+          throw new Error(`Place details API error: ${data.status}`);
+        }
 
-      return data.result || null;
+        return data.result || null;
+      });
     } catch (error) {
       console.error("Error getting place details:", error);
       throw error;

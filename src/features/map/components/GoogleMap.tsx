@@ -260,7 +260,20 @@ export function GoogleMap({
           description: placeDetails.editorial_summary?.overview,
           thumbnailUrl,
           status: "found",
-          type: placeDetails.types?.some(type => ['lodging', 'hotel', 'hostel', 'resort', 'motel', 'bed_and_breakfast', 'guest_house', 'apartment_complex'].includes(type)) ? "hotel" : "place",
+          type: placeDetails.types?.some((type) =>
+            [
+              "lodging",
+              "hotel",
+              "hostel",
+              "resort",
+              "motel",
+              "bed_and_breakfast",
+              "guest_house",
+              "apartment_complex",
+            ].includes(type)
+          )
+            ? "hotel"
+            : "place",
         };
 
         setPlacePopup((prev) => ({
@@ -650,15 +663,7 @@ export function GoogleMap({
 
       {/* Add Place Popup */}
       {placePopup.isOpen && placePopup.position && (
-        <div
-          className="absolute pointer-events-none"
-          style={{
-            left: "50%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
-            pointerEvents: "none",
-          }}
-        >
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
           <div className="relative pointer-events-auto">
             <AddPlacePopup
               isOpen={placePopup.isOpen}

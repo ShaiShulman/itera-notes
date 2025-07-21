@@ -27,13 +27,17 @@ export function AddPlacePopup({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-              <h3 className="text-sm font-semibold text-slate-800">Add to Itinerary</h3>
+              <h3 className="text-sm font-semibold text-slate-800">
+                Add to Itinerary
+              </h3>
             </div>
-            
+
             {isLoading ? (
               <div className="flex items-center gap-2 py-2">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                <span className="text-sm text-slate-600">Loading place details...</span>
+                <span className="text-sm text-slate-600">
+                  Loading place details...
+                </span>
               </div>
             ) : placeData ? (
               <div className="space-y-2">
@@ -70,10 +74,12 @@ export function AddPlacePopup({
                 )}
               </div>
             ) : (
-              <h4 className="text-base font-semibold text-slate-900">{placeName}</h4>
+              <h4 className="text-base font-semibold text-slate-900">
+                {placeName}
+              </h4>
             )}
           </div>
-          
+
           {/* Place Image */}
           {placeData?.thumbnailUrl && (
             <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0">
@@ -84,7 +90,7 @@ export function AddPlacePopup({
               />
             </div>
           )}
-          
+
           {/* Close Button */}
           <button
             onClick={onClose}
@@ -113,7 +119,7 @@ export function AddPlacePopup({
         <h5 className="text-xs font-medium text-slate-700 mb-3 uppercase tracking-wide">
           Select Day
         </h5>
-        
+
         {!isLoading && currentItinerary && currentItinerary.days.length > 0 ? (
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {currentItinerary.days.map((day, index) => {
@@ -131,11 +137,11 @@ export function AddPlacePopup({
                 >
                   <div className="flex items-center gap-3">
                     {/* Colored Bullet */}
-                    <div 
-                      className="w-3 h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: dayColor }}
+                    <div
+                      className={`bg-[${dayColor}] w-3 h-3 rounded-full flex-shrink-0`}
+                      aria-label={`Day color: ${dayColor}`}
                     ></div>
-                    
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm font-semibold text-slate-900">
@@ -153,7 +159,7 @@ export function AddPlacePopup({
                         {day.title}
                       </div>
                     </div>
-                    
+
                     {/* Add Icon */}
                     <div className="flex-shrink-0">
                       <svg
