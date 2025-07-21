@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useCallback, useMemo } from "react";
@@ -109,8 +108,8 @@ export function ItineraryMap({
             {mapData.days.map((day) => (
               <div key={day.index} className="flex items-center gap-2 text-xs">
                 <div
-                  className="w-3 h-3 rounded-full border border-white shadow-sm"
-                  style={{ backgroundColor: day.color }}
+                  className={`bg-[${day.color}] w-3 h-3 rounded-full border border-white shadow-sm`}
+                  aria-label={`Day color: ${day.color}`}
                 />
                 <span className="text-slate-600">
                   {day.title} {day.date && `(${day.date})`}

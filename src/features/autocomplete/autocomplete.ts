@@ -6,6 +6,7 @@ import {
   PLACE_TYPE_CONFIGS,
 } from "./types";
 import { getIconForPlaceType, getPlaceTypeName } from "./icons";
+import { getPlaceDetailsAction } from "@/features/editor/actions/places";
 
 export function attachAutocomplete(
   input: HTMLInputElement,
@@ -312,50 +313,35 @@ export function attachAutocomplete(
     hideDropdown();
 
     try {
-      // Get detailed place information
-      const request = {
-        placeId: prediction.place_id,
-        fields: [
-          "place_id",
-          "name",
-          "formatted_address",
-          "geometry",
-          "rating",
-          "photos",
-          "editorial_summary",
-          "types",
-        ],
-      };
+      // Use cached server action instead of direct API call
+      const placeDetails = await getPlaceDetailsAction(prediction.place_id);
+      
+      if (placeDetails) {
+        const enrichedPrediction: AutocompletePrediction = {
+          ...prediction,
+          // Add additional details from server response
+          place_details: {
+            name: placeDetails.name || prediction.structured_formatting.main_text,
+            formatted_address: placeDetails.formatted_address || "",
+            geometry: placeDetails.geometry,
+            rating: placeDetails.rating,
+            photos: placeDetails.photos,
+            editorial_summary: placeDetails.editorial_summary,
+            types: placeDetails.types || prediction.types,
+          },
+        };
 
-      placesService.getDetails(request, (place, status) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK && place) {
-          const enrichedPrediction: AutocompletePrediction = {
-            ...prediction,
-            // Add additional details from place
-            place_details: {
-              name: place.name || prediction.structured_formatting.main_text,
-              formatted_address: place.formatted_address || "",
-              geometry: place.geometry,
-              rating: place.rating,
-              photos: place.photos,
-              editorial_summary: (place as any).editorial_summary,
-              types: place.types || prediction.types,
-            },
-          };
+        // Update input value
+        input.value = placeDetails.name || prediction.structured_formatting.main_text;
 
-          // Update input value
-          input.value =
-            place.name || prediction.structured_formatting.main_text;
-
-          // Call selection callback
-          options.onSelect(enrichedPrediction);
-        } else {
-          console.error("Place details error:", status);
-          // Fallback to basic prediction
-          input.value = prediction.structured_formatting.main_text;
-          options.onSelect(prediction);
-        }
-      });
+        // Call selection callback
+        options.onSelect(enrichedPrediction);
+      } else {
+        console.warn("No place details found for:", prediction.place_id);
+        // Fallback to basic prediction
+        input.value = prediction.structured_formatting.main_text;
+        options.onSelect(prediction);
+      }
     } catch (error) {
       console.error("Error getting place details:", error);
       // Fallback to basic prediction
