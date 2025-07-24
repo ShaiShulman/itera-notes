@@ -63,7 +63,7 @@ export function attachAutocomplete(
       border: 2px solid #10b981;
       border-top: none;
       border-radius: 0 0 8px 8px;
-      max-height: 240px;
+      max-height: 320px;
       overflow-y: auto;
       z-index: 1000;
       display: none;
@@ -102,23 +102,23 @@ export function attachAutocomplete(
       item.className = "autocomplete-item";
       item.dataset.index = index.toString();
       item.style.cssText = `
-        padding: 8px 12px;
+        padding: 12px 16px;
         border-bottom: 1px solid #f3f4f6;
         cursor: pointer;
         transition: background-color 0.2s;
         display: flex;
         align-items: center;
-        gap: 8px;
-        font-size: 13px;
-        line-height: 1.4;
+        gap: 12px;
+        font-size: 14px;
+        line-height: 1.5;
       `;
 
       // Create icon container
       const iconContainer = document.createElement("div");
       iconContainer.style.cssText = `
         flex-shrink: 0;
-        width: 18px;
-        height: 18px;
+        width: 20px;
+        height: 20px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -132,35 +132,34 @@ export function attachAutocomplete(
         min-width: 0;
       `;
 
-      // Main text
+      // Main text (place name)
       const mainText = document.createElement("div");
       mainText.style.cssText = `
-        font-weight: 500;
+        font-weight: 600;
         color: #065f46;
-        font-size: 13px;
+        font-size: 14px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        margin-bottom: 2px;
       `;
       mainText.textContent = prediction.structured_formatting.main_text;
 
-      // Secondary text
-      const secondaryText = document.createElement("div");
-      secondaryText.style.cssText = `
-        font-size: 11px;
+      // Address text (secondary text as address)
+      const addressText = document.createElement("div");
+      addressText.style.cssText = `
+        font-size: 12px;
         color: #6b7280;
-        margin-top: 1px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        font-weight: 400;
       `;
-      secondaryText.textContent =
-        prediction.structured_formatting.secondary_text;
+      addressText.textContent =
+        prediction.structured_formatting.secondary_text || "Address not available";
 
       contentContainer.appendChild(mainText);
-      if (prediction.structured_formatting.secondary_text) {
-        contentContainer.appendChild(secondaryText);
-      }
+      contentContainer.appendChild(addressText);
 
       // Type badge
       const typeBadge = document.createElement("div");
@@ -197,8 +196,15 @@ export function attachAutocomplete(
 
       // Handle click selection
       item.addEventListener("click", (e) => {
+        e.preventDefault();
         e.stopPropagation();
         selectPrediction(prediction);
+      });
+
+      // Also handle mousedown to ensure selection works
+      item.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
       });
 
       dropdown?.appendChild(item);
@@ -254,11 +260,18 @@ export function attachAutocomplete(
       });
 
       freeTextItem.addEventListener("click", (e) => {
+        e.preventDefault();
         e.stopPropagation();
         if (options.onFreeText) {
           options.onFreeText(input.value);
         }
         hideDropdown();
+      });
+
+      // Also handle mousedown for free text item
+      freeTextItem.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
       });
 
       dropdown.appendChild(freeTextItem);
@@ -451,6 +464,18 @@ export function attachAutocomplete(
           } else if (currentPredictions[index]) {
             selectPrediction(currentPredictions[index]);
           }
+        } else if (input.value.trim()) {
+          // No item selected but there's text - try search first
+          const query = input.value.trim();
+          if (options.onFreeTextSearch) {
+            // Use the new search callback
+            options.onFreeTextSearch(query);
+            hideDropdown();
+          } else if (options.onFreeText) {
+            // Fallback to old behavior
+            options.onFreeText(query);
+            hideDropdown();
+          }
         }
         break;
       case "Escape":
@@ -466,7 +491,7 @@ export function attachAutocomplete(
       if (!isDestroyed) {
         hideDropdown();
       }
-    }, 200);
+    }, 300);
   };
 
   const handleFocus = () => {

@@ -1,4 +1,12 @@
 // Google Maps configuration settings (excluding center and zoom)
+export const MAP_EVENTS_DEBOUNCE = 300; // 300ms debounce
+
+// Bounds management settings
+export const RESET_MAP_BOUNDS_ON_UPDATE = true; // Reset map bounds when places are modified
+
+// Max zoom level when focusing on day bounds
+export const MAX_ZOOM_LEVEL = 1000;
+
 export interface MapConfiguration {
   mapTypeId: any; // google.maps.MapTypeId
   disableDefaultUI: boolean;

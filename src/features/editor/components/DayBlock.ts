@@ -7,6 +7,11 @@ export default class DayBlock {
   private isExpanded: boolean = false;
   private actualDayNumber: number = 1; // Auto-calculated day number
   private orderObserver: MutationObserver | null = null; // Store observer for cleanup
+  
+  // Editing state management
+  private originalTitle: string = "";
+  private isCurrentlyEditingTitle: boolean = false;
+  private currentTitleValue: string = "";
 
   static get toolbox() {
     return {
@@ -128,6 +133,31 @@ export default class DayBlock {
         this.orderObserver = observer;
       }
     }, 100);
+  }
+
+  // Editing state management methods
+  private startEditingTitle(): void {
+    this.originalTitle = this.data.title || "";
+    this.currentTitleValue = this.data.title || "";
+    this.isCurrentlyEditingTitle = true;
+    console.log(`DayBlock: Started editing title "${this.originalTitle}"`);
+  }
+
+  private commitTitleEdit(): void {
+    if (this.isCurrentlyEditingTitle) {
+      this.data.title = this.currentTitleValue;
+      this.isCurrentlyEditingTitle = false;
+      console.log(`DayBlock: Committed title edit "${this.currentTitleValue}"`);
+    }
+  }
+
+  private revertTitleEdit(): void {
+    if (this.isCurrentlyEditingTitle) {
+      this.currentTitleValue = this.originalTitle;
+      this.data.title = this.originalTitle;
+      this.isCurrentlyEditingTitle = false;
+      console.log(`DayBlock: Reverted title edit to "${this.originalTitle}"`);
+    }
   }
 
   private renderCollapsed() {
@@ -397,11 +427,14 @@ export default class DayBlock {
       this.toggle();
     });
 
+    // Start editing mode for title
+    this.startEditingTitle();
+    
     // Title input
     const titleInput = document.createElement("input");
     titleInput.type = "text";
     titleInput.placeholder = "Enter day title...";
-    titleInput.value = this.data.title || "";
+    titleInput.value = this.currentTitleValue;
     titleInput.style.cssText = `
       width: 100%;
       border: 1px solid #93c5fd;
@@ -415,21 +448,62 @@ export default class DayBlock {
       border-radius: 6px;
     `;
     titleInput.addEventListener("input", (e) => {
-      this.data.title = (e.target as HTMLInputElement).value;
-      titleDisplay.textContent = this.data.title || "Click to add title...";
+      this.currentTitleValue = (e.target as HTMLInputElement).value;
+      // Don't update this.data.title until Enter is pressed
     });
 
     titleInput.addEventListener("click", (e) => {
       e.stopPropagation();
     });
 
-    // Add Enter key handler for title input
-    titleInput.addEventListener("keypress", (e) => {
+    // Add Enter and Escape key handlers for title input
+    titleInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         e.stopPropagation();
+        
+        // Commit the title edit
+        this.commitTitleEdit();
+        
+        // Update the collapsed display
+        titleDisplay.textContent = this.data.title || "Click to add title...";
+        
+        // Save and collapse
         this.saveAndCollapse();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Revert changes
+        this.revertTitleEdit();
+        
+        // Update input value to reverted title
+        titleInput.value = this.currentTitleValue;
+        
+        // Just collapse without saving
+        this.isExpanded = false;
+        this.renderCollapsed();
       }
+    });
+
+    // Handle blur event for title input (focus loss to other elements)
+    titleInput.addEventListener("blur", (e) => {
+      // Small delay to ensure we're not just moving to another field in the same block
+      setTimeout(() => {
+        if (this.isCurrentlyEditingTitle) {
+          console.log("DayBlock: Title input focus lost, reverting edit");
+          
+          // Revert changes
+          this.revertTitleEdit();
+          
+          // Update input value to reverted title
+          titleInput.value = this.currentTitleValue;
+          
+          // Just collapse without saving
+          this.isExpanded = false;
+          this.renderCollapsed();
+        }
+      }, 200);
     });
 
     // Date input

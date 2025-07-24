@@ -18,9 +18,14 @@ import {
 import { getDayColor } from "@/features/map/utils/colors";
 import { useItinerary } from "@/contexts/ItineraryContext";
 import { PlaceLocation } from "@/services/openai/itinerary";
+import {
+  calculateDayBounds,
+  emitFitDayBounds,
+} from "@/features/map/boundsManager";
 import HeaderBlock from "@editorjs/header";
 import ParagraphBlock from "@editorjs/paragraph";
 import "./editorjs-global.css";
+import { MAX_ZOOM_LEVEL } from "@/features/map/components/mapSettings";
 interface EditorBlock {
   type: string;
   data: Record<string, unknown>;
@@ -156,6 +161,53 @@ async function updatePlaceBlocksWithDrivingTimes(
   }
 }
 
+// Helper function to extract places from a specific day
+async function extractPlacesFromDay(
+  editorRef: any,
+  targetDayNumber: number
+): Promise<Array<{ lat: number; lng: number; name: string }>> {
+  if (!editorRef.current) {
+    return [];
+  }
+
+  try {
+    const outputData = await editorRef.current.save();
+    const blocks = outputData.blocks || [];
+
+    const dayPlaces: Array<{ lat: number; lng: number; name: string }> = [];
+    let currentDayNumber = 0;
+
+    for (const block of blocks) {
+      if (block.type === "day") {
+        currentDayNumber++;
+      } else if (
+        (block.type === "place" || block.type === "hotel") &&
+        currentDayNumber === targetDayNumber
+      ) {
+        const placeData = block.data as PlaceBlockData;
+
+        // Only include places with valid coordinates
+        if (placeData.lat && placeData.lng && placeData.name) {
+          dayPlaces.push({
+            lat: placeData.lat,
+            lng: placeData.lng,
+            name: placeData.name,
+          });
+        }
+      }
+    }
+
+    console.log(
+      `🗺️ Extracted ${dayPlaces.length} places from day ${targetDayNumber}:`,
+      dayPlaces.map((p) => p.name)
+    );
+    return dayPlaces;
+  } catch (error) {
+    console.error("Error extracting places from day:", error);
+    return [];
+  }
+}
+
 export default function ItineraryEditor({
   data,
   onChange,
@@ -243,6 +295,38 @@ export default function ItineraryEditor({
     },
     [state.currentItinerary, updateDay]
   );
+
+  // Function to trigger day-specific bounds calculation with maxZoom constraint
+  const triggerDayBounds = useCallback(async (dayNumber: number) => {
+    console.log(
+      `🗺️ ItineraryEditor: Triggering day bounds for day ${dayNumber}`
+    );
+
+    try {
+      // Extract places from the specific day
+      const dayPlaces = await extractPlacesFromDay(editorRef, dayNumber);
+
+      if (dayPlaces.length === 0) {
+        console.log(
+          `🗺️ No places found for day ${dayNumber}, skipping bounds update`
+        );
+        return;
+      }
+
+      // Calculate bounds for the day's places
+      const bounds = calculateDayBounds(dayPlaces);
+
+      if (bounds) {
+        // Emit event to fit map to day bounds with maxZoom constraint
+        emitFitDayBounds(bounds, MAX_ZOOM_LEVEL);
+      }
+    } catch (error) {
+      console.error(
+        `Error calculating day bounds for day ${dayNumber}:`,
+        error
+      );
+    }
+  }, []);
 
   // Function to find and expand a place block by uid
   const findAndExpandPlace = useCallback((uid: string) => {
@@ -500,7 +584,7 @@ export default function ItineraryEditor({
             if (onChange && editorRef.current) {
               try {
                 const outputData = await editorRef.current.save();
-                onChange(outputData);
+                onChange({ ...outputData, time: undefined });
 
                 // Sync editor deletions back to context with a small delay
                 // This prevents deleted places from being re-added
@@ -564,15 +648,18 @@ export default function ItineraryEditor({
 
             // Add event listener for place selection events
             const handlePlaceSelectionEvent = (event: CustomEvent) => {
-              const { uid, dayIndex, isSelected, placeName } = event.detail;
+              const { uid, dayIndex, dayNumber, isSelected, placeName } =
+                event.detail;
               console.log(
                 `ItineraryEditor: Place selection event - ${placeName} (${
                   isSelected ? "selected" : "deselected"
-                })`
+                }) on day ${dayNumber || dayIndex}`
               );
 
               if (isSelected) {
                 setSelectedPlace({ uid, dayIndex });
+                // Trigger day-specific bounds calculation when a place is selected
+                triggerDayBounds(dayNumber || dayIndex || 1);
               } else {
                 setSelectedPlace(null);
               }

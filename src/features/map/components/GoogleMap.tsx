@@ -17,13 +17,17 @@ import { PlaceLocation } from "@/services/openai/itinerary";
 import { useItinerary } from "@/contexts/ItineraryContext";
 import { AddPlacePopup } from "./AddPlacePopup";
 import { PlacePopupState } from "./types";
-import { getDefaultMapOptions } from "./mapSettings";
+import {
+  getDefaultMapOptions,
+  MAP_EVENTS_DEBOUNCE,
+  RESET_MAP_BOUNDS_ON_UPDATE,
+} from "./mapSettings";
+import { emitMapBoundsChanged, debounce, MapBounds } from "../boundsManager";
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 const DEFAULT_CENTER = { lat: 40.7128, lng: -74.006 }; // New York City default
-const FOCUSED_ZOOM_LEVEL = 10;
 
-export function GoogleMap({
+export const GoogleMap = React.memo(function GoogleMap({
   data,
   onPlaceClick,
   onMapReady,
@@ -147,6 +151,82 @@ export function GoogleMap({
 
         directionsRendererRef.current = new DirectionsPolyRenderer(map);
 
+        // Set up bounds change detection for autocomplete biasing
+        const handleBoundsChanged = debounce(() => {
+          const bounds = map.getBounds();
+          if (bounds) {
+            const mapBounds: MapBounds = {
+              northeast: {
+                lat: bounds.getNorthEast().lat(),
+                lng: bounds.getNorthEast().lng(),
+              },
+              southwest: {
+                lat: bounds.getSouthWest().lat(),
+                lng: bounds.getSouthWest().lng(),
+              },
+            };
+            emitMapBoundsChanged(mapBounds);
+          }
+        }, MAP_EVENTS_DEBOUNCE);
+
+        // Listen for map bounds changes
+        map.addListener("bounds_changed", handleBoundsChanged);
+        map.addListener("zoom_changed", handleBoundsChanged);
+
+        // Listen for day-specific bounds fitting
+        const handleFitDayBounds = (event: CustomEvent) => {
+          const { bounds, maxZoom } = event.detail;
+          console.log("🗺️ GoogleMap: Received fit day bounds event", {
+            bounds,
+            maxZoom,
+          });
+
+          if (bounds) {
+            // Convert bounds to Google Maps LatLngBounds
+            const googleBounds = new google.maps.LatLngBounds(
+              new google.maps.LatLng(
+                bounds.southwest.lat,
+                bounds.southwest.lng
+              ),
+              new google.maps.LatLng(bounds.northeast.lat, bounds.northeast.lng)
+            );
+
+            // Fit bounds with padding
+            map.fitBounds(googleBounds, {
+              top: 50,
+              right: 50,
+              bottom: 50,
+              left: 50,
+            });
+
+            // Check zoom level after fitBounds and constrain if necessary
+            if (maxZoom !== undefined) {
+              const checkAndConstrainZoom = () => {
+                const currentZoom = map.getZoom();
+                if (currentZoom !== undefined && currentZoom > maxZoom) {
+                  console.log(
+                    `🗺️ Constraining zoom from ${currentZoom} to ${maxZoom}`
+                  );
+                  map.setZoom(maxZoom);
+                }
+              };
+
+              // Add a brief delay to ensure fitBounds has completed
+              setTimeout(checkAndConstrainZoom, 100);
+            }
+
+            console.log("✅ GoogleMap: Applied day bounds fitting");
+          }
+        };
+
+        // Add window event listener for day bounds fitting
+        if (typeof window !== "undefined") {
+          window.addEventListener(
+            "map:fitDayBounds",
+            handleFitDayBounds as EventListener
+          );
+        }
+
         // POI click handler - triggers only when clicking on Google Maps POIs
         map.addListener(
           "click",
@@ -211,6 +291,10 @@ export function GoogleMap({
         console.log("Cleaning up directions renderer");
         directionsRendererRef.current.clearPolylines();
         directionsRendererRef.current = null;
+      }
+      // Cleanup day bounds event listener
+      if (typeof window !== "undefined") {
+        window.removeEventListener("map:fitDayBounds", () => {});
       }
     };
   }, [mapContainer, onMapReady, closePopup]);
@@ -392,8 +476,8 @@ export function GoogleMap({
 
     console.log(`✅ Created ${markers.length} markers`);
 
-    // Adjust map bounds if there are places
-    if (data.places.length > 0) {
+    // Adjust map bounds if there are places and auto-bounds is enabled
+    if (data.places.length > 0 && RESET_MAP_BOUNDS_ON_UPDATE) {
       const bounds = new google.maps.LatLngBounds();
       const validPlaces = data.places.filter((place) => {
         return (
@@ -418,12 +502,19 @@ export function GoogleMap({
         try {
           map.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
           setOriginalBounds(bounds);
+          console.log(
+            "🗺️ Map bounds reset due to RESET_MAP_BOUNDS_ON_UPDATE=true"
+          );
         } catch (error) {
           console.error("Error fitting bounds:", error);
           console.error("Bounds:", bounds);
           console.error("Valid places:", validPlaces);
         }
       }
+    } else if (data.places.length > 0) {
+      console.log(
+        "🗺️ Map bounds NOT reset due to RESET_MAP_BOUNDS_ON_UPDATE=false"
+      );
     }
 
     mapInstanceRef.current.markers = markers;
@@ -500,7 +591,6 @@ export function GoogleMap({
         };
 
         map.setCenter(placePosition);
-        map.setZoom(FOCUSED_ZOOM_LEVEL);
 
         // Make marker jump with animation
         marker.setAnimation(google.maps.Animation.BOUNCE);
@@ -514,9 +604,9 @@ export function GoogleMap({
         }, 3000);
       }
     } else {
-      if (originalBounds) {
-        map.fitBounds(originalBounds);
-      }
+      // if (originalBounds) {
+      //   map.fitBounds(originalBounds);
+      // }
     }
   }, [selectedPlace, isLoaded, data.places, originalBounds, selectedMarker]);
 
@@ -689,7 +779,17 @@ export function GoogleMap({
       )}
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison to prevent unnecessary re-renders
+  // Only re-render if places data, selectedPlace, or className actually changed
+  const placesEqual = JSON.stringify(prevProps.data.places) === JSON.stringify(nextProps.data.places);
+  const directionsEqual = JSON.stringify(prevProps.data.directions) === JSON.stringify(nextProps.data.directions);
+  const selectedPlaceEqual = prevProps.selectedPlace?.uid === nextProps.selectedPlace?.uid &&
+    prevProps.selectedPlace?.dayIndex === nextProps.selectedPlace?.dayIndex;
+  const classNameEqual = prevProps.className === nextProps.className;
+  
+  return placesEqual && directionsEqual && selectedPlaceEqual && classNameEqual;
+});
 
 // Helper functions
 function calculateMapCenter(places: MapPlace[]): { lat: number; lng: number } {

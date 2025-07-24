@@ -56,7 +56,7 @@ export function parseItineraryResponse(
 
       const title = dayInfo
         .replace(/\d{4}-\d{2}-\d{2}/, "")
-        .replace(/^-\s*/, "")
+        .replace(/^\s*-\s*/, "") // Remove any leading " - "
         .trim();
 
       currentDay = {
@@ -83,7 +83,7 @@ export function parseItineraryResponse(
           currentPlaceText.trim();
       }
 
-      const placeName = placeMatch[1].trim();
+      const placeName = placeMatch[1].replace("**", "").trim();
       const lat = parseFloat(placeMatch[2]);
       const lng = parseFloat(placeMatch[3]);
 
