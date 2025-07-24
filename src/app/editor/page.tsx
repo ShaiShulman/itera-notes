@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { MapIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
 import dynamic from "next/dynamic";
 import { useItinerary } from "@/contexts/ItineraryContext";
@@ -44,6 +44,31 @@ const ItineraryMap = dynamic(
   }
 );
 
+// Deep comparison function for EditorData
+function deepCompareEditorData(a: EditorData | undefined, b: EditorData | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  
+  // Compare version and time (but ignore time if undefined)
+  if (a.version !== b.version) return false;
+  if (a.time !== undefined && b.time !== undefined && a.time !== b.time) return false;
+  
+  // Compare blocks array
+  if (!a.blocks || !b.blocks) return a.blocks === b.blocks;
+  if (a.blocks.length !== b.blocks.length) return false;
+  
+  // Deep compare each block
+  for (let i = 0; i < a.blocks.length; i++) {
+    const blockA = a.blocks[i];
+    const blockB = b.blocks[i];
+    
+    if (blockA.type !== blockB.type) return false;
+    if (JSON.stringify(blockA.data) !== JSON.stringify(blockB.data)) return false;
+  }
+  
+  return true;
+}
+
 export default function EditorPage() {
   const { state } = useItinerary();
   const [editorData, setEditorData] = useState<EditorData | undefined>();
@@ -72,7 +97,7 @@ export default function EditorPage() {
     if (!state.currentItinerary && !state.editorData && !editorData) {
       console.log("📝 No itinerary found, starting with empty editor");
       const emptyEditorData: EditorData = {
-        time: Date.now(),
+        time: undefined,
         version: "2.8.22",
         blocks: [],
       };
@@ -135,6 +160,12 @@ export default function EditorPage() {
     }
   }, []);
 
+  // Memoize the blocks data to prevent unnecessary map re-renders
+  const memoizedBlocks = useMemo(
+    () => editorData?.blocks,
+    [editorData?.blocks]
+  );
+
   console.log("EditorPage: Component rendering");
   console.log("🔍 Debug state:", {
     hasCurrentItinerary: !!state.currentItinerary,
@@ -182,7 +213,7 @@ export default function EditorPage() {
               </div>
               <div className="flex-1 min-h-0">
                 <ItineraryMap
-                  editorData={editorData?.blocks}
+                  editorData={memoizedBlocks}
                   directionsData={directionsData}
                   onRefreshDirections={handleRefreshDirections}
                   className="h-full"

@@ -107,8 +107,12 @@ export async function findPlaceByNameAction(placeName: string): Promise<{
         placeId: placeDetails.place_id,
         name: placeDetails.name,
         address: placeDetails.formatted_address,
-        lat: placeDetails.geometry.location.lat,
-        lng: placeDetails.geometry.location.lng,
+        lat: typeof placeDetails.geometry.location.lat === 'function' 
+          ? placeDetails.geometry.location.lat() 
+          : placeDetails.geometry.location.lat,
+        lng: typeof placeDetails.geometry.location.lng === 'function' 
+          ? placeDetails.geometry.location.lng() 
+          : placeDetails.geometry.location.lng,
         rating: placeDetails.rating,
         photoReferences,
         description: placeDetails.editorial_summary?.overview,

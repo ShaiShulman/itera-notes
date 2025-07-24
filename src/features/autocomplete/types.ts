@@ -1,7 +1,7 @@
 export interface AutocompleteLocationBias {
   lat: number;
   lng: number;
-  radius: number; // radius in meters
+  radius: number; // in meters
 }
 
 export interface AutocompletePrediction {
@@ -28,6 +28,7 @@ export interface AutocompleteOptions {
   locationBias?: AutocompleteLocationBias;
   onSelect: (prediction: AutocompletePrediction) => void;
   onFreeText?: (text: string) => void;
+  onFreeTextSearch?: (text: string) => Promise<void>;
   placeholder?: string;
   minLength?: number;
   maxResults?: number;

@@ -68,7 +68,8 @@ export interface BasePlaceBlockData {
   notes?: string;
   description?: string;
   thumbnailUrl?: string;
-  status?: "idle" | "loading" | "found" | "error" | "free-text";
+  status?: "idle" | "loading" | "found" | "error" | "free-text" | "not-found" | "renamed";
+  hasBeenSearched?: boolean; // Track if place was found via initial search
   drivingTimeFromPrevious?: number;
   drivingDistanceFromPrevious?: number;
 }

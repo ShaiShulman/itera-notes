@@ -45,3 +45,7 @@ docs/
 
 # logs
 logs/
+
+# cache
+.claude/
+.cache/

@@ -37,18 +37,22 @@ export function ItineraryMap({
 
   // Memoize the transformation to prevent infinite re-renders
   const mapData = useMemo(() => {
-    console.log("🗺️ ItineraryMap: transforming editorData:", editorData);
-    console.log("🗺️ ItineraryMap: data hash:", dataHash);
+    const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+    console.log(`🗺️ [${timestamp}] ItineraryMap: useMemo triggered - transforming editorData:`, editorData?.length || 0, "blocks");
+    console.log(`🗺️ [${timestamp}] ItineraryMap: data hash:`, dataHash);
+    console.log(`🗺️ [${timestamp}] ItineraryMap: directionsData:`, directionsData?.length || 0, "routes");
 
     if (editorData && editorData.length > 0) {
+      console.log(`🗺️ [${timestamp}] ItineraryMap: Calling transformEditorDataToMapData...`);
       const result = transformEditorDataToMapData(editorData);
 
       // Add directions data if available
       if (directionsData && directionsData.length > 0) {
         result.directions = directionsData;
+        console.log(`🗺️ [${timestamp}] ItineraryMap: Added ${directionsData.length} direction routes to result`);
       }
 
-      console.log("🗺️ ItineraryMap: transformation result:", result);
+      console.log(`🗺️ [${timestamp}] ItineraryMap: transformation result:`, result);
       return result;
     }
 
@@ -58,9 +62,9 @@ export function ItineraryMap({
       places: [],
       directions: directionsData || [],
     };
-    console.log("🗺️ ItineraryMap: returning empty result:", emptyResult);
+    console.log(`🗺️ [${timestamp}] ItineraryMap: returning empty result:`, emptyResult);
     return emptyResult;
-  }, [dataHash, directionsData]); // Include directionsData in dependencies
+  }, [dataHash, directionsData]); // Back to using hash for optimization
 
   const handlePlaceClick = useCallback(
     (place: MapPlace | null) => {
