@@ -225,8 +225,9 @@ export default function ItineraryEditor({
   const holderRef = useRef<HTMLDivElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { setSelectedPlace, state, updateDay } = useItinerary();
+  const { setSelectedPlace, state, updateDay, setEditorData } = useItinerary();
   const { selectedPlace } = state;
+  const syncInProgressRef = useRef(false);
 
   // Function to sync editor deletions back to context
   const syncEditorDeletionsToContext = useCallback(
@@ -581,18 +582,31 @@ export default function ItineraryEditor({
           },
           onChange: async () => {
             console.log("ItineraryEditor: Content changed");
-            if (onChange && editorRef.current) {
+            if (editorRef.current) {
               try {
+                // Set sync flag to prevent context-to-editor updates during this operation
+                syncInProgressRef.current = true;
+                
                 const outputData = await editorRef.current.save();
-                onChange({ ...outputData, time: undefined });
+                
+                // Persist to context immediately
+                setEditorData({ ...outputData, time: undefined });
+                
+                // Call parent onChange callback if provided
+                if (onChange) {
+                  onChange({ ...outputData, time: undefined });
+                }
 
                 // Sync editor deletions back to context with a small delay
                 // This prevents deleted places from being re-added
                 setTimeout(() => {
                   syncEditorDeletionsToContext(outputData);
+                  // Clear sync flag after context sync completes
+                  syncInProgressRef.current = false;
                 }, 100);
               } catch (error) {
                 console.error("ItineraryEditor: Error saving data:", error);
+                syncInProgressRef.current = false;
               }
             }
           },
@@ -706,6 +720,12 @@ export default function ItineraryEditor({
   // Watch for changes in itinerary context and add new places to editor
   useEffect(() => {
     if (!isReady || !state.currentItinerary) return;
+    
+    // Skip if we're in the middle of a sync operation to prevent loops
+    if (syncInProgressRef.current) {
+      console.log("📝 Skipping context-to-editor sync - sync in progress");
+      return;
+    }
 
     // Get current editor data to compare
     if (editorRef.current) {
@@ -822,7 +842,7 @@ export default function ItineraryEditor({
           console.error("Error comparing editor data with context:", error);
         });
     }
-  }, [state.currentItinerary, isReady]);
+  }, [state.currentItinerary, isReady, setEditorData]);
 
   // Expose refresh directions function to parent component
   useEffect(() => {

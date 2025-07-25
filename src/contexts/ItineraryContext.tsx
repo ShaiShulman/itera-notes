@@ -5,6 +5,7 @@ import React, {
   useContext,
   useReducer,
   useCallback,
+  useEffect,
   ReactNode,
 } from "react";
 import {
@@ -13,6 +14,11 @@ import {
   PlaceLocation,
 } from "@/services/openai/itinerary";
 import { EditorData } from "@/features/editor/types";
+import {
+  loadItineraryFromStorage,
+  saveItineraryToStorage,
+  clearItineraryFromStorage,
+} from "./localStorage";
 
 // Define the shape of our itinerary state
 export interface ItineraryState {
@@ -307,6 +313,28 @@ interface ItineraryProviderProps {
 export function ItineraryProvider({ children }: ItineraryProviderProps) {
   const [state, dispatch] = useReducer(itineraryReducer, initialState);
 
+  // Load from localStorage on initialization
+  useEffect(() => {
+    const storedData = loadItineraryFromStorage();
+    if (storedData) {
+      // Restore stored itinerary
+      if (storedData.currentItinerary) {
+        dispatch({ type: "SET_ITINERARY", payload: storedData.currentItinerary });
+      }
+      
+      // Restore stored editor data
+      if (storedData.editorData) {
+        dispatch({ type: "SET_EDITOR_DATA", payload: storedData.editorData });
+      }
+      
+      console.log("📂 Restored itinerary from localStorage", {
+        hasItinerary: !!storedData.currentItinerary,
+        hasEditorData: !!storedData.editorData,
+        lastUpdated: storedData.lastUpdated,
+      });
+    }
+  }, []);
+
   // Action creators
   const setLoading = useCallback((loading: boolean) => {
     dispatch({ type: "SET_LOADING", payload: loading });
@@ -361,6 +389,7 @@ export function ItineraryProvider({ children }: ItineraryProviderProps) {
 
   const clearItinerary = useCallback(() => {
     dispatch({ type: "CLEAR_ITINERARY" });
+    clearItineraryFromStorage();
   }, []);
 
   const markSaved = useCallback(() => {
@@ -395,6 +424,24 @@ export function ItineraryProvider({ children }: ItineraryProviderProps) {
     },
     [state.currentItinerary]
   );
+
+  // Save to localStorage whenever state changes (debounced)
+  useEffect(() => {
+    // Skip saving during initial load or when there's no meaningful data
+    if (!state.lastUpdated) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      saveItineraryToStorage(
+        state.currentItinerary,
+        state.editorData,
+        state.lastUpdated
+      );
+    }, 500); // Debounce saves by 500ms
+
+    return () => clearTimeout(timeoutId);
+  }, [state.currentItinerary, state.editorData, state.lastUpdated]);
 
   const value: ItineraryContextValue = {
     state,
