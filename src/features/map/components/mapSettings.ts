@@ -16,6 +16,7 @@ export interface MapConfiguration {
   streetViewControl: boolean;
   rotateControl: boolean;
   fullscreenControl: boolean;
+  gestureHandling: string;
   styles: any[]; // google.maps.MapTypeStyle[]
 }
 
@@ -91,5 +92,6 @@ export const getDefaultMapOptions = (): MapConfiguration => ({
   streetViewControl: false,
   rotateControl: false,
   fullscreenControl: true,
+  gestureHandling: "greedy",
   styles: getTouristMapStyles(),
 });

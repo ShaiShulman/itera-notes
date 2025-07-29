@@ -450,6 +450,7 @@ export function attachAutocomplete(
         navigateDropdown("up");
         break;
       case "Enter":
+      case "Tab":
         e.preventDefault();
         const selectedItem = dropdown?.querySelector(
           ".autocomplete-item.selected"

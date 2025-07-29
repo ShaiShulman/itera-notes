@@ -45,29 +45,29 @@ const ItineraryMap = dynamic(
 );
 
 // Deep comparison function for EditorData
-function deepCompareEditorData(a: EditorData | undefined, b: EditorData | undefined): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  
-  // Compare version and time (but ignore time if undefined)
-  if (a.version !== b.version) return false;
-  if (a.time !== undefined && b.time !== undefined && a.time !== b.time) return false;
-  
-  // Compare blocks array
-  if (!a.blocks || !b.blocks) return a.blocks === b.blocks;
-  if (a.blocks.length !== b.blocks.length) return false;
-  
-  // Deep compare each block
-  for (let i = 0; i < a.blocks.length; i++) {
-    const blockA = a.blocks[i];
-    const blockB = b.blocks[i];
-    
-    if (blockA.type !== blockB.type) return false;
-    if (JSON.stringify(blockA.data) !== JSON.stringify(blockB.data)) return false;
-  }
-  
-  return true;
-}
+// function deepCompareEditorData(a: EditorData | undefined, b: EditorData | undefined): boolean {
+// if (a === b) return true;
+// if (!a || !b) return false;
+
+// // Compare version and time (but ignore time if undefined)
+// if (a.version !== b.version) return false;
+// if (a.time !== undefined && b.time !== undefined && a.time !== b.time) return false;
+
+// // Compare blocks array
+// if (!a.blocks || !b.blocks) return a.blocks === b.blocks;
+// if (a.blocks.length !== b.blocks.length) return false;
+
+// // Deep compare each block
+// for (let i = 0; i < a.blocks.length; i++) {
+//   const blockA = a.blocks[i];
+//   const blockB = b.blocks[i];
+
+//   if (blockA.type !== blockB.type) return false;
+//   if (JSON.stringify(blockA.data) !== JSON.stringify(blockB.data)) return false;
+// }
+
+// return true;
+// }
 
 export default function EditorPage() {
   const { state } = useItinerary();

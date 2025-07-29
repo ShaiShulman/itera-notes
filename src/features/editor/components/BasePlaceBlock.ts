@@ -11,6 +11,7 @@ import {
   boundsToLocationBias,
 } from "@/features/map/boundsManager";
 import { AutocompleteLocationBias } from "@/features/autocomplete/types";
+import { findPlaceByNameAction } from "../actions/places";
 
 export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
   protected data: T;
@@ -113,11 +114,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       // Extract coordinates from geometry - handle both function and property formats
       let lat = 0;
       let lng = 0;
-      
+
       if (placeDetails.geometry?.location) {
         const location = placeDetails.geometry.location;
         // Check if lat/lng are functions (Google Maps API format)
-        if (typeof location.lat === 'function') {
+        if (typeof location.lat === "function") {
           lat = location.lat();
           lng = location.lng();
         } else {
@@ -217,9 +218,81 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       onSelect: (prediction) => {
         this.handleAutocompleteSelection(prediction, statusIndicator);
       },
+      onFreeTextSearch: async (text) => {
+        // Check if this is an existing place (has placeId) - if so, just treat as free text
+        const wasExistingPlace = !!this.originalName && !!this.data.placeId;
+
+        if (wasExistingPlace) {
+          // For existing places, just update the name as free text
+          this.data.name = text;
+          this.data.status = "free-text";
+          this.updateStatusIndicator(statusIndicator, "free-text");
+          console.log(
+            `📝 ${this.blockType}: Existing place renamed to "${text}" (free text)`
+          );
+        } else {
+          // For new places (no placeId), try to search for the text as a place
+          this.data.status = "loading";
+          this.updateStatusIndicator(statusIndicator, "loading");
+
+          try {
+            const searchResult = await findPlaceByNameAction(text);
+
+            if (searchResult.success && searchResult.place) {
+              // Place found! Update data with found place details
+              this.data = {
+                ...this.data,
+                placeId: searchResult.place.placeId,
+                name: searchResult.place.name,
+                address: searchResult.place.address,
+                lat: searchResult.place.lat,
+                lng: searchResult.place.lng,
+                rating: searchResult.place.rating || 0,
+                photoReferences: searchResult.place.photoReferences,
+                description: searchResult.place.description || "",
+                thumbnailUrl: searchResult.place.thumbnailUrl || "",
+                status: "found",
+              };
+
+              // Update currentInputValue to the found place name
+              this.currentInputValue = searchResult.place.name;
+
+              this.updateStatusIndicator(statusIndicator, "found");
+              console.log(
+                `🔍 ${this.blockType}: Found place "${searchResult.place.name}" for query "${text}"`
+              );
+            } else {
+              // No place found, treat as free text
+              this.data.name = text;
+              this.data.status = "not-found";
+              this.updateStatusIndicator(statusIndicator, "not-found");
+              console.log(
+                `🔍 ${this.blockType}: No place found for "${text}", treating as free text`
+              );
+            }
+          } catch (error) {
+            console.error(
+              `🔍 ${this.blockType}: Search error for "${text}":`,
+              error
+            );
+            // Error occurred, treat as free text
+            this.data.name = text;
+            this.data.status = "not-found";
+            this.updateStatusIndicator(statusIndicator, "not-found");
+          }
+        }
+
+        this.commitEdit();
+        this.renderCollapsed(false);
+
+        // Trigger editor change event
+        if (this.wrapper) {
+          const changeEvent = new Event("input", { bubbles: true });
+          this.wrapper.dispatchEvent(changeEvent);
+        }
+      },
       onFreeText: (text) => {
-        // This shouldn't be called in the new system since we handle Enter manually
-        // But keep it for compatibility
+        // Fallback handler (shouldn't be called with onFreeTextSearch present)
         this.currentInputValue = text;
         this.commitEdit();
         this.renderCollapsed(false);
@@ -302,16 +375,10 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     if (this.isCurrentlyEditingName) {
       this.data.name = this.currentInputValue;
 
-      // Check if this creates a free text override for existing place
-      if (this.isFreeTextForExistingPlace()) {
-        this.data.status = "free-text";
-        console.log(
-          `${this.blockType}: Committed free text override "${this.currentInputValue}" for existing place`
-        );
-      } else {
-        console.log(
-          `${this.blockType}: Committed edit "${this.currentInputValue}"`
-        );
+      // Only override status if it's not already "found" from a successful search
+      if (this.data.status !== "found") {
+        // Check if this creates a free text override for existing place
+        if (this.isFreeTextForExistingPlace()) this.data.status = "free-text";
       }
 
       this.isCurrentlyEditingName = false;
@@ -490,9 +557,82 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         onSelect: (prediction) => {
           this.handleAutocompleteSelection(prediction, statusIndicator);
         },
+        onFreeTextSearch: async (text) => {
+          // Check if this is an existing place (has placeId) - if so, just treat as free text
+          const wasExistingPlace = !!this.originalName && !!this.data.placeId;
+
+          if (wasExistingPlace) {
+            // For existing places, just update the name as free text
+            this.data.name = text;
+            this.data.status = "free-text";
+            this.updateStatusIndicator(statusIndicator, "free-text");
+            console.log(
+              `📝 ${this.blockType}: Existing place renamed to "${text}" (free text)`
+            );
+          } else {
+            // For new places (no placeId), try to search for the text as a place
+            this.data.status = "loading";
+            this.updateStatusIndicator(statusIndicator, "loading");
+
+            try {
+              const searchResult = await findPlaceByNameAction(text);
+
+              if (searchResult.success && searchResult.place) {
+                // Place found! Update data with found place details
+                this.data = {
+                  ...this.data,
+                  placeId: searchResult.place.placeId,
+                  name: searchResult.place.name,
+                  address: searchResult.place.address,
+                  lat: searchResult.place.lat,
+                  lng: searchResult.place.lng,
+                  rating: searchResult.place.rating || 0,
+                  photoReferences: searchResult.place.photoReferences,
+                  description: searchResult.place.description || "",
+                  thumbnailUrl: searchResult.place.thumbnailUrl || "",
+                  status: "found",
+                };
+
+                // Update currentInputValue to the found place name
+                this.currentInputValue = searchResult.place.name;
+
+                this.updateStatusIndicator(statusIndicator, "found");
+                console.log(
+                  `🔍 ${this.blockType}: Found place "${searchResult.place.name}" for query "${text}"`
+                );
+              } else {
+                // No place found, treat as free text
+                this.data.name = text;
+                this.data.status = "not-found";
+                this.updateStatusIndicator(statusIndicator, "not-found");
+                console.log(
+                  `🔍 ${this.blockType}: No place found for "${text}", treating as free text`
+                );
+              }
+            } catch (error) {
+              console.error(
+                `🔍 ${this.blockType}: Search error for "${text}":`,
+                error
+              );
+              // Error occurred, treat as free text
+              this.data.name = text;
+              this.data.status = "not-found";
+              this.updateStatusIndicator(statusIndicator, "not-found");
+            }
+          }
+
+          this.commitEdit();
+          this.renderCollapsed(false);
+
+          // Trigger editor change event
+          if (this.wrapper) {
+            const changeEvent = new Event("input", { bubbles: true });
+            this.wrapper.dispatchEvent(changeEvent);
+          }
+        },
         onFreeText: (text) => {
+          // Fallback handler (shouldn't be called with onFreeTextSearch present)
           this.data.name = text;
-          // For empty blocks (no placeId), mark as "not-found" if place couldn't be found
           this.data.status = this.data.placeId ? "free-text" : "not-found";
           this.updateStatusIndicator(statusIndicator, this.data.status);
           this.renderCollapsed(false);
@@ -508,29 +648,9 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         // Don't update this.data.name until Enter or autocomplete selection
       });
 
-      // Handle Enter and Escape keys
+      // Handle Escape key (Enter and Tab are handled by autocomplete)
       placeInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          e.stopPropagation();
-
-          // Commit the current input value
-          this.commitEdit();
-          
-          // For empty blocks (no placeId), set status to "not-found" if no autocomplete selection was made
-          if (!this.data.placeId && this.currentInputValue) {
-            this.data.status = "not-found";
-          }
-
-          // Exit editing mode and re-render
-          this.renderCollapsed(false);
-
-          // Trigger editor change event
-          if (this.wrapper) {
-            const changeEvent = new Event("input", { bubbles: true });
-            this.wrapper.dispatchEvent(changeEvent);
-          }
-        } else if (e.key === "Escape") {
+        if (e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
 
@@ -601,7 +721,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         e.stopPropagation();
         placeName.style.color = isFreeText ? "#6b7280" : "#065f46";
       });
-      
+
       // Make place name clickable to enter edit mode
       placeName.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -611,25 +731,25 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       placeNameContainer.appendChild(placeName);
 
       // Add alert icon and tooltip for free text
-      if (isFreeText) {
-        const alertIcon = document.createElement("div");
-        alertIcon.style.cssText = `
-          color: #f59e0b;
-          cursor: help;
-          display: flex;
-          align-items: center;
-        `;
-        alertIcon.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2L2 7v10c0 5.55 3.84 9.32 9 9.32s9-3.77 9-9.32V7l-10-5z"/>
-            <path d="M12 8v4M12 16h0"/>
-          </svg>
-        `;
-        alertIcon.title =
-          "This is a custom name for the place. The original place data is preserved.";
+      // if (isFreeText) {
+      //   const alertIcon = document.createElement("div");
+      //   alertIcon.style.cssText = `
+      //     color: #f59e0b;
+      //     cursor: help;
+      //     display: flex;
+      //     align-items: center;
+      //   `;
+      //   alertIcon.innerHTML = `
+      //     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+      //       <path d="M12 2L2 7v10c0 5.55 3.84 9.32 9 9.32s9-3.77 9-9.32V7l-10-5z"/>
+      //       <path d="M12 8v4M12 16h0"/>
+      //     </svg>
+      //   `;
+      //   alertIcon.title =
+      //     "This is a custom name for the place. The original place data is preserved.";
 
-        placeNameContainer.appendChild(alertIcon);
-      }
+      //   placeNameContainer.appendChild(alertIcon);
+      // }
 
       nameContainer.appendChild(placeNameContainer);
     } else if (!this.data.name) {
@@ -676,7 +796,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         e.stopPropagation();
         placeName.style.color = "#374151";
       });
-      
+
       // Make place name clickable to enter edit mode
       placeName.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -684,24 +804,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       });
 
       notFoundContainer.appendChild(placeName);
-
-      // Add red alert icon for place not found
-      const alertIcon = document.createElement("div");
-      alertIcon.style.cssText = `
-        color: #ef4444;
-        cursor: help;
-        display: flex;
-        align-items: center;
-      `;
-      alertIcon.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2L2 7v10c0 5.55 3.84 9.32 9 9.32s9-3.77 9-9.32V7l-10-5z"/>
-          <path d="M12 8v4M12 16h0"/>
-        </svg>
-      `;
-      alertIcon.title = "Place cannot be found. This is a custom text entry.";
-
-      notFoundContainer.appendChild(alertIcon);
       nameContainer.appendChild(notFoundContainer);
     }
 
@@ -718,6 +820,8 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       justify-content: center;
       flex-shrink: 0;
     `;
+    statusIndicator.title =
+      "This is a custom name for the place. The original place data is preserved.";
 
     if (isEditing) {
       this.updateStatusIndicator(statusIndicator, this.data.status || "idle");
@@ -779,8 +883,12 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
           'input[data-editing="true"]'
         ) as HTMLInputElement;
         if (input) {
-          // Simulate Enter key press to use our new editing system
-          const enterEvent = new KeyboardEvent("keydown", { key: "Enter" });
+          // Trigger the autocomplete's Enter handler which will handle search vs free text
+          const enterEvent = new KeyboardEvent("keydown", {
+            key: "Enter",
+            bubbles: true,
+            cancelable: true,
+          });
           input.dispatchEvent(enterEvent);
         }
       });
@@ -818,12 +926,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         this.data.drivingDistanceFromPrevious || 0
       );
 
-      drivingTime.innerHTML = `
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-          <path d="M5 12V7a1 1 0 0 1 1-1h4l2-3h2l2 3h4a1 1 0 0 1 1 1v5" stroke="currentColor" stroke-width="2" fill="none"/>
-          <circle cx="7" cy="17" r="2" stroke="currentColor" stroke-width="2" fill="none"/>
-          <circle cx="17" cy="17" r="2" stroke="currentColor" stroke-width="2" fill="none"/>
-        </svg>
+      drivingTime.innerHTML = `<svg fill="#000000" width="800px" height="800px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6.62,13.08a.9.9,0,0,0-.54.54,1,1,0,0,0,1.3,1.3,1.15,1.15,0,0,0,.33-.21,1.15,1.15,0,0,0,.21-.33A.84.84,0,0,0,8,14a1.05,1.05,0,0,0-.29-.71A1,1,0,0,0,6.62,13.08Zm13.14-4L18.4,5.05a3,3,0,0,0-2.84-2H8.44A3,3,0,0,0,5.6,5.05L4.24,9.11A3,3,0,0,0,2,12v4a3,3,0,0,0,2,2.82V20a1,1,0,0,0,2,0V19H18v1a1,1,0,0,0,2,0V18.82A3,3,0,0,0,22,16V12A3,3,0,0,0,19.76,9.11ZM7.49,5.68A1,1,0,0,1,8.44,5h7.12a1,1,0,0,1,1,.68L17.61,9H6.39ZM20,16a1,1,0,0,1-1,1H5a1,1,0,0,1-1-1V12a1,1,0,0,1,1-1H19a1,1,0,0,1,1,1Zm-3.38-2.92a.9.9,0,0,0-.54.54,1,1,0,0,0,1.3,1.3.9.9,0,0,0,.54-.54A.84.84,0,0,0,18,14a1.05,1.05,0,0,0-.29-.71A1,1,0,0,0,16.62,13.08ZM13,13H11a1,1,0,0,0,0,2h2a1,1,0,0,0,0-2Z"/></svg>
         ${formattedDriving}
       `;
       contentContainer.appendChild(drivingTime);
@@ -918,25 +1021,25 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     placeNameContainer.appendChild(placeName);
 
     // Add alert icon and tooltip for free text in expanded mode
-    if (isFreeText) {
-      const alertIcon = document.createElement("div");
-      alertIcon.style.cssText = `
-        color: #f59e0b;
-        cursor: help;
-        display: flex;
-        align-items: center;
-      `;
-      alertIcon.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2L2 7v10c0 5.55 3.84 9.32 9 9.32s9-3.77 9-9.32V7l-10-5z"/>
-          <path d="M12 8v4M12 16h0"/>
-        </svg>
-      `;
-      alertIcon.title =
-        "This is a custom name for the place. The original place data is preserved.";
+    // if (isFreeText) {
+    //   const alertIcon = document.createElement("div");
+    //   alertIcon.style.cssText = `
+    //     color: #f59e0b;
+    //     cursor: help;
+    //     display: flex;
+    //     align-items: center;
+    //   `;
+    //   alertIcon.innerHTML = `
+    //     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    //       <path d="M12 2L2 7v10c0 5.55 3.84 9.32 9 9.32s9-3.77 9-9.32V7l-10-5z"/>
+    //       <path d="M12 8v4M12 16h0"/>
+    //     </svg>
+    //   `;
+    //   alertIcon.title =
+    //     "This is a custom name for the place. The original place data is preserved.";
 
-      placeNameContainer.appendChild(alertIcon);
-    }
+    //   placeNameContainer.appendChild(alertIcon);
+    // }
 
     // Make place name clickable to enter edit mode
     placeName.style.cursor = "pointer";
@@ -944,11 +1047,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       e.stopPropagation();
       this.renderCollapsed(true);
     });
-    
+
     placeName.addEventListener("mouseenter", () => {
       placeName.style.textDecoration = "underline";
     });
-    
+
     placeName.addEventListener("mouseleave", () => {
       placeName.style.textDecoration = "none";
     });
@@ -984,7 +1087,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       margin-bottom: 16px;
     `;
 
-    if (this.data.placeId && this.data.photoReferences && this.data.photoReferences.length > 0) {
+    if (
+      this.data.placeId &&
+      this.data.photoReferences &&
+      this.data.photoReferences.length > 0
+    ) {
       const imagesGrid = document.createElement("div");
       imagesGrid.style.cssText = `
         display: grid;
@@ -1305,7 +1412,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
             display: flex;
             align-items: center;
             justify-content: center;
-          ">
+          " title="Place found">
             <span style="color: white; font-size: 10px; font-weight: bold;">✓</span>
           </div>
         `;
@@ -1320,7 +1427,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
             display: flex;
             align-items: center;
             justify-content: center;
-          ">
+          " title="This is a custom name for the place. The original place data is preserved">
             <span style="color: white; font-size: 8px; font-weight: bold;">T</span>
           </div>
         `;
@@ -1336,7 +1443,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
             display: flex;
             align-items: center;
             justify-content: center;
-          ">
+          " title="This place could not be found">
             <span style="color: white; font-size: 10px; font-weight: bold;">!</span>
           </div>
         `;
