@@ -5,6 +5,7 @@ import React, {
   useContext,
   useReducer,
   useCallback,
+  useEffect,
   ReactNode,
 } from "react";
 import {
@@ -13,6 +14,65 @@ import {
   PlaceLocation,
 } from "@/services/openai/itinerary";
 import { EditorData } from "@/features/editor/types";
+
+// localStorage constants
+const STORAGE_KEY = "itera-notes-itinerary-state";
+const STORAGE_VERSION = "1.0";
+
+// Helper functions for localStorage
+const saveToLocalStorage = (state: ItineraryState) => {
+  try {
+    if (typeof window !== "undefined") {
+      const dataToSave = {
+        version: STORAGE_VERSION,
+        state: {
+          ...state,
+          // Convert Date objects to ISO strings for storage
+          lastUpdated: state.lastUpdated?.toISOString() || null,
+        },
+        timestamp: new Date().toISOString(),
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+      console.log("💾 Saved itinerary state to localStorage");
+    }
+  } catch (error) {
+    console.error("Failed to save to localStorage:", error);
+  }
+};
+
+const loadFromLocalStorage = (): ItineraryState | null => {
+  try {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (!stored) return null;
+
+      const parsed = JSON.parse(stored);
+      
+      // Check version compatibility
+      if (parsed.version !== STORAGE_VERSION) {
+        console.warn("localStorage version mismatch, clearing stored data");
+        localStorage.removeItem(STORAGE_KEY);
+        return null;
+      }
+
+      // Convert ISO strings back to Date objects
+      const state = {
+        ...parsed.state,
+        lastUpdated: parsed.state.lastUpdated ? new Date(parsed.state.lastUpdated) : null,
+      };
+
+      console.log("📥 Loaded itinerary state from localStorage");
+      return state;
+    }
+  } catch (error) {
+    console.error("Failed to load from localStorage:", error);
+    // Clear corrupted data
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }
+  return null;
+};
 
 // Define the shape of our itinerary state
 export interface ItineraryState {
@@ -66,7 +126,7 @@ export type ItineraryAction =
       payload: { uid: string; dayIndex: number } | null;
     };
 
-// Initial state
+// Initial state - will be overridden by localStorage if available
 const initialState: ItineraryState = {
   currentItinerary: null,
   editorData: null,
@@ -305,7 +365,20 @@ interface ItineraryProviderProps {
 
 // Provider component
 export function ItineraryProvider({ children }: ItineraryProviderProps) {
-  const [state, dispatch] = useReducer(itineraryReducer, initialState);
+  // Initialize state with localStorage data if available
+  const [state, dispatch] = useReducer(itineraryReducer, initialState, (initial) => {
+    const stored = loadFromLocalStorage();
+    return stored || initial;
+  });
+
+  // Save to localStorage whenever state changes (debounced)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      saveToLocalStorage(state);
+    }, 500); // 500ms debounce to prevent excessive writes
+
+    return () => clearTimeout(timeoutId);
+  }, [state]);
 
   // Action creators
   const setLoading = useCallback((loading: boolean) => {

@@ -45,83 +45,100 @@ const ItineraryMap = dynamic(
 );
 
 // Deep comparison function for EditorData
-// function deepCompareEditorData(a: EditorData | undefined, b: EditorData | undefined): boolean {
-// if (a === b) return true;
-// if (!a || !b) return false;
+function deepCompareEditorData(a: EditorData | undefined, b: EditorData | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
 
-// // Compare version and time (but ignore time if undefined)
-// if (a.version !== b.version) return false;
-// if (a.time !== undefined && b.time !== undefined && a.time !== b.time) return false;
+  // Compare version (ignore time as it can vary)
+  if (a.version !== b.version) return false;
 
-// // Compare blocks array
-// if (!a.blocks || !b.blocks) return a.blocks === b.blocks;
-// if (a.blocks.length !== b.blocks.length) return false;
+  // Compare blocks array
+  if (!a.blocks || !b.blocks) return a.blocks === b.blocks;
+  if (a.blocks.length !== b.blocks.length) return false;
 
-// // Deep compare each block
-// for (let i = 0; i < a.blocks.length; i++) {
-//   const blockA = a.blocks[i];
-//   const blockB = b.blocks[i];
+  // Deep compare each block
+  for (let i = 0; i < a.blocks.length; i++) {
+    const blockA = a.blocks[i];
+    const blockB = b.blocks[i];
 
-//   if (blockA.type !== blockB.type) return false;
-//   if (JSON.stringify(blockA.data) !== JSON.stringify(blockB.data)) return false;
-// }
+    if (blockA.type !== blockB.type) return false;
+    if (JSON.stringify(blockA.data) !== JSON.stringify(blockB.data)) return false;
+  }
 
-// return true;
-// }
+  return true;
+}
 
 export default function EditorPage() {
-  const { state } = useItinerary();
-  const [editorData, setEditorData] = useState<EditorData | undefined>();
+  const { state, setEditorData } = useItinerary();
+  const [localEditorData, setLocalEditorData] = useState<EditorData | undefined>();
   const [directionsData, setDirectionsData] = useState<any[]>([]);
   const editorRefreshFnRef = useRef<(() => Promise<any>) | null>(null);
+  const isUpdatingFromEditor = useRef(false);
 
-  // Load editor data from context whenever it changes
+  // Load editor data from context whenever it changes (with change detection)
   useEffect(() => {
-    if (state.editorData) {
-      console.log("📝 Loading itinerary from context:", state.editorData);
-      setEditorData(state.editorData);
+    if (state.editorData && !isUpdatingFromEditor.current) {
+      // Only update if the data is actually different
+      if (!deepCompareEditorData(localEditorData, state.editorData)) {
+        console.log("📝 Loading itinerary from context:", state.editorData);
+        setLocalEditorData(state.editorData);
+      } else {
+        console.log("📝 Context data unchanged, skipping update");
+      }
     }
-  }, [state.editorData]);
+    
+    // Reset the flag after checking
+    if (isUpdatingFromEditor.current) {
+      isUpdatingFromEditor.current = false;
+    }
+  }, [state.editorData, localEditorData]);
 
   // Convert currentItinerary to editorData if we have itinerary but no editorData
   useEffect(() => {
     if (state.currentItinerary && !state.editorData) {
       console.log("📝 Converting current itinerary to editor data");
-      const editorData = convertItineraryToEditorData(state.currentItinerary);
-      setEditorData(editorData);
+      const convertedEditorData = convertItineraryToEditorData(state.currentItinerary);
+      setLocalEditorData(convertedEditorData);
     }
   }, [state.currentItinerary, state.editorData]);
 
   // Initialize with empty itinerary if no data exists
   useEffect(() => {
-    if (!state.currentItinerary && !state.editorData && !editorData) {
+    if (!state.currentItinerary && !state.editorData && !localEditorData) {
       console.log("📝 No itinerary found, starting with empty editor");
       const emptyEditorData: EditorData = {
         time: undefined,
         version: "2.8.22",
         blocks: [],
       };
-      setEditorData(emptyEditorData);
+      setLocalEditorData(emptyEditorData);
     }
-  }, [state.currentItinerary, state.editorData, editorData]);
+  }, [state.currentItinerary, state.editorData, localEditorData]);
 
   // Log editor data changes for debugging
   useEffect(() => {
-    console.log("🗺️ Editor page: Current editorData:", editorData);
+    console.log("🗺️ Editor page: Current localEditorData:", localEditorData);
     console.log(
       "🗺️ Editor page: Blocks being passed to map:",
-      editorData?.blocks
+      localEditorData?.blocks
     );
-  }, [editorData]);
+  }, [localEditorData]);
 
   const handleEditorChange = (data: EditorData) => {
     console.log("📝 Editor page: Editor data changed:", data);
     console.log("📝 Editor page: Editor blocks:", data.blocks);
     console.log("📝 Editor page: Number of blocks:", data.blocks?.length);
 
+    // Set flag to prevent loading from context on next cycle
+    isUpdatingFromEditor.current = true;
+
+    // Update local state for immediate UI response
+    setLocalEditorData(data);
+    
+    // Update context which will trigger localStorage save
     setEditorData(data);
-    // TODO: Extract places for map visualization
-    console.log("📝 Editor page: Updated editorData state");
+    
+    console.log("📝 Editor page: Updated both local and context state");
   };
 
   // Stable callback for when refresh function is ready
@@ -162,20 +179,20 @@ export default function EditorPage() {
 
   // Memoize the blocks data to prevent unnecessary map re-renders
   const memoizedBlocks = useMemo(
-    () => editorData?.blocks,
-    [editorData?.blocks]
+    () => localEditorData?.blocks,
+    [localEditorData?.blocks]
   );
 
   console.log("EditorPage: Component rendering");
   console.log("🔍 Debug state:", {
     hasCurrentItinerary: !!state.currentItinerary,
     hasEditorData: !!state.editorData,
-    localEditorData: !!editorData,
-    editorDataBlocks: editorData?.blocks?.length || 0,
+    hasLocalEditorData: !!localEditorData,
+    editorDataBlocks: localEditorData?.blocks?.length || 0,
   });
   console.log(
-    "🔍 Full editorData being passed to ItineraryEditor:",
-    editorData
+    "🔍 Full localEditorData being passed to ItineraryEditor:",
+    localEditorData
   );
 
   return (
@@ -193,11 +210,11 @@ export default function EditorPage() {
               </div>
               <div className="flex-1 min-h-0 px-3 py-2">
                 <ItineraryEditor
-                  data={editorData}
+                  data={localEditorData}
                   onChange={handleEditorChange}
                   onRefreshReady={handleRefreshReady}
                   placeholder={
-                    editorData?.blocks?.length
+                    localEditorData?.blocks?.length
                       ? "Your itinerary is loading..."
                       : "Start planning your itinerary..."
                   }
