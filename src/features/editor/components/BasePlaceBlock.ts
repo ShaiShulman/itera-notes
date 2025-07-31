@@ -12,6 +12,7 @@ import {
 } from "@/features/map/boundsManager";
 import { AutocompleteLocationBias } from "@/features/autocomplete/types";
 import { findPlaceByNameAction } from "../actions/places";
+import { createImageSkeleton } from "@/components/ui/skeleton";
 
 export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
   protected data: T;
@@ -140,18 +141,13 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         photoReferences:
           placeDetails.photos
             ?.map((photo: any) => {
-              console.log("Photo object:", photo);
-              if (photo.getUrl) {
-                return photo.getUrl({ maxWidth: 400 });
-              }
-              // Fallback for other formats
-              return "";
+              const photoRef = photo.photo_reference;
+              console.log("Photo reference:", photoRef ? `${photoRef.substring(0, 20)}...${photoRef.substring(photoRef.length - 20)}` : 'none');
+              return photoRef;
             })
             .filter(Boolean) || [],
         description: placeDetails.editorial_summary?.overview || "",
-        thumbnailUrl: placeDetails.photos?.[0]?.getUrl
-          ? placeDetails.photos[0].getUrl({ maxWidth: 100 })
-          : "",
+        thumbnailUrl: placeDetails.photos?.[0]?.photo_reference || "",
         status: "found",
       };
     } else {
@@ -502,16 +498,64 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
 
     // Thumbnail (if available and confirmed)
     if (!isEditing && this.data.thumbnailUrl) {
+      const thumbnailContainer = document.createElement("div");
+      thumbnailContainer.style.cssText = `
+        width: 24px;
+        height: 24px;
+        flex-shrink: 0;
+        position: relative;
+      `;
+
       const thumbnail = document.createElement("img");
-      thumbnail.src = this.data.thumbnailUrl;
+      thumbnail.src = `/api/places/photos/${this.data.thumbnailUrl}?width=150`;
       thumbnail.style.cssText = `
         width: 24px;
         height: 24px;
         border-radius: 4px;
         object-fit: cover;
-        flex-shrink: 0;
+        opacity: 0;
+        transition: opacity 0.3s ease;
       `;
-      contentContainer.appendChild(thumbnail);
+
+      // Only show skeleton if image doesn't load quickly (indicating it's not cached)
+      let skeleton: HTMLElement | null = null;
+      let showSkeletonTimeout: number | null = null;
+
+      // Show skeleton after 50ms if image hasn't loaded (not cached)
+      showSkeletonTimeout = window.setTimeout(() => {
+        skeleton = createImageSkeleton("24px", "24px");
+        thumbnailContainer.appendChild(skeleton);
+        showSkeletonTimeout = null;
+      }, 50);
+
+      thumbnail.addEventListener("load", () => {
+        // Cancel skeleton if image loads quickly (cached)
+        if (showSkeletonTimeout) {
+          clearTimeout(showSkeletonTimeout);
+          showSkeletonTimeout = null;
+        }
+        // Remove skeleton if it was shown
+        if (skeleton) {
+          skeleton.remove();
+        }
+        thumbnail.style.opacity = "1";
+      });
+
+      thumbnail.addEventListener("error", () => {
+        // Cancel skeleton timeout
+        if (showSkeletonTimeout) {
+          clearTimeout(showSkeletonTimeout);
+          showSkeletonTimeout = null;
+        }
+        // Remove skeleton if it was shown
+        if (skeleton) {
+          skeleton.remove();
+        }
+        // Keep the container but show nothing on error
+      });
+
+      thumbnailContainer.appendChild(thumbnail);
+      contentContainer.appendChild(thumbnailContainer);
     }
 
     // Name/Input container
@@ -1116,18 +1160,46 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         `;
 
         const image = document.createElement("img");
-        image.src = photoRef;
+        image.src = `/api/places/photos/${photoRef}?width=400`;
         image.style.cssText = `
           width: 100%;
           height: 100%;
           object-fit: cover;
-          transition: transform 0.2s ease;
+          transition: transform 0.2s ease, opacity 0.3s ease;
+          opacity: 0;
         `;
 
-        // Add hover effect and image popup
+        // Only show skeleton if image doesn't load quickly (indicating it's not cached)
+        let skeleton: HTMLElement | null = null;
+        let showSkeletonTimeout: number | null = null;
+
+        // Show skeleton after 50ms if image hasn't loaded (not cached)
+        showSkeletonTimeout = window.setTimeout(() => {
+          skeleton = createImageSkeleton("80px", "80px");
+          imageContainer.appendChild(skeleton);
+          showSkeletonTimeout = null;
+        }, 50);
+
+        // Image load success
+        image.addEventListener("load", () => {
+          // Cancel skeleton if image loads quickly (cached)
+          if (showSkeletonTimeout) {
+            clearTimeout(showSkeletonTimeout);
+            showSkeletonTimeout = null;
+          }
+          // Remove skeleton if it was shown
+          if (skeleton) {
+            skeleton.remove();
+          }
+          image.style.opacity = "1";
+        });
+
+        // Add hover effect and image popup (only after loaded)
         image.addEventListener("mouseenter", () => {
-          image.style.transform = "scale(1.05)";
-          this.showImagePopover(image, photoRef);
+          if (image.style.opacity === "1") {
+            image.style.transform = "scale(1.05)";
+            this.showImagePopover(image, `/api/places/photos/${photoRef}?width=600`);
+          }
         });
 
         image.addEventListener("mouseleave", () => {
@@ -1135,8 +1207,17 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
           this.hideImagePopover();
         });
 
-        // Add loading placeholder
+        // Handle loading error
         image.addEventListener("error", () => {
+          // Cancel skeleton timeout
+          if (showSkeletonTimeout) {
+            clearTimeout(showSkeletonTimeout);
+            showSkeletonTimeout = null;
+          }
+          // Remove skeleton if it was shown
+          if (skeleton) {
+            skeleton.remove();
+          }
           imageContainer.style.background = "#e5e7eb";
           imageContainer.innerHTML = `
             <div style="
