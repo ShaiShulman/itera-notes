@@ -2,6 +2,9 @@ import { MapData, MapPlace, DayData } from "../types";
 import { getDayColor } from "./colors";
 import { BasePlaceBlockData, DayBlockData } from "../../editor/types";
 
+// Module-level variable to track previous transform hash
+let previousTransformHash = '';
+
 // Editor.js block interface
 interface EditorBlock {
   type: string;
@@ -52,16 +55,16 @@ export function transformEditorDataToMapData(blocks: EditorBlock[]): MapData {
   console.log(`🔍 [${timestamp}] Current data hash:`, currentHash);
   
   // Store previous hash for comparison (using a module-level variable)
-  if (!transformEditorDataToMapData.previousHash) {
-    transformEditorDataToMapData.previousHash = '';
+  if (!previousTransformHash) {
+    previousTransformHash = '';
   }
   
-  if (transformEditorDataToMapData.previousHash === currentHash) {
+  if (previousTransformHash === currentHash) {
     console.log(`✅ [${timestamp}] Hash unchanged - data is identical, but transformation still proceeding`);
   } else {
-    console.log(`🆕 [${timestamp}] Hash changed from:`, transformEditorDataToMapData.previousHash);
+    console.log(`🆕 [${timestamp}] Hash changed from:`, previousTransformHash);
     console.log(`🆕 [${timestamp}] Hash changed to:  `, currentHash);
-    transformEditorDataToMapData.previousHash = currentHash;
+    previousTransformHash = currentHash;
   }
 
   const days: DayData[] = [];

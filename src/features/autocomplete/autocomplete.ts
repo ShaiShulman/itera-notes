@@ -19,7 +19,6 @@ export function attachAutocomplete(
 
   // State
   let autocompleteService: google.maps.places.AutocompleteService;
-  let placesService: google.maps.places.PlacesService;
   let dropdown: HTMLElement | null = null;
   let currentPredictions: AutocompletePrediction[] = [];
   let searchTimeout: NodeJS.Timeout;
@@ -29,9 +28,6 @@ export function attachAutocomplete(
   // Initialize services
   try {
     autocompleteService = new google.maps.places.AutocompleteService();
-    // Create a dummy div for PlacesService (required by Google Maps API)
-    const dummyDiv = document.createElement("div");
-    placesService = new google.maps.places.PlacesService(dummyDiv);
   } catch (error) {
     console.error("Failed to initialize Google Places services:", error);
     throw new Error("Failed to initialize Google Places services");
@@ -156,7 +152,8 @@ export function attachAutocomplete(
         font-weight: 400;
       `;
       addressText.textContent =
-        prediction.structured_formatting.secondary_text || "Address not available";
+        prediction.structured_formatting.secondary_text ||
+        "Address not available";
 
       contentContainer.appendChild(mainText);
       contentContainer.appendChild(addressText);
@@ -328,24 +325,38 @@ export function attachAutocomplete(
     try {
       // Use cached server action instead of direct API call
       const placeDetails = await getPlaceDetailsAction(prediction.place_id);
-      
+
       if (placeDetails) {
         const enrichedPrediction: AutocompletePrediction = {
           ...prediction,
           // Add additional details from server response
           place_details: {
-            name: placeDetails.name || prediction.structured_formatting.main_text,
+            name:
+              placeDetails.name || prediction.structured_formatting.main_text,
             formatted_address: placeDetails.formatted_address || "",
-            geometry: placeDetails.geometry,
+            geometry: placeDetails.geometry
+              ? {
+                  location: new google.maps.LatLng(
+                    placeDetails.geometry.location.lat,
+                    placeDetails.geometry.location.lng
+                  ),
+                }
+              : undefined,
             rating: placeDetails.rating,
-            photos: placeDetails.photos,
+            photos: placeDetails.photos?.map((photo) => ({
+              ...photo,
+              getUrl: () =>
+                `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${photo.photo_reference}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`,
+              html_attributions: [],
+            })),
             editorial_summary: placeDetails.editorial_summary,
             types: placeDetails.types || prediction.types,
           },
         };
 
         // Update input value
-        input.value = placeDetails.name || prediction.structured_formatting.main_text;
+        input.value =
+          placeDetails.name || prediction.structured_formatting.main_text;
 
         // Call selection callback
         options.onSelect(enrichedPrediction);

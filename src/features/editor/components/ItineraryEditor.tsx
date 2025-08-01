@@ -8,15 +8,11 @@ import type {
   PlaceBlockData,
 } from "../types";
 import {
-  calculateDirections,
-  extractDrivingTimes,
-} from "../actions/directions";
-import {
   PlaceCoordinate,
   DirectionsResponse,
 } from "@/services/google/directions";
-import { getDayColor } from "@/features/map/utils/colors";
 import { useItinerary } from "@/contexts/ItineraryContext";
+import { calculateDirectionsForDays } from "@/features/directions/generator";
 import { PlaceLocation } from "@/services/openai/itinerary";
 import {
   calculateDayBounds,
@@ -431,86 +427,11 @@ export default function ItineraryEditor({
         return { directions: [], updatedPlaces: [] };
       }
 
-      const directionsResults: Array<{
-        dayIndex: number;
-        color: string;
-        directionsResult: DirectionsResponse;
-      }> = [];
-      const drivingTimesByUid: {
-        [uid: string]: { time: number; distance: number };
-      } = {};
+      // Use shared directions calculation logic
+      const { directions, drivingTimesByUid } =
+        await calculateDirectionsForDays(placesByDay);
 
-      // Calculate directions for each day with at least 2 places
-      for (const [dayIndexStr, places] of Object.entries(placesByDay)) {
-        const dayIndex = parseInt(dayIndexStr);
-
-        if (places.length < 2) {
-          console.log(
-            `🚗 Day ${dayIndex + 1}: Only ${
-              places.length
-            } place(s), skipping directions`
-          );
-          continue;
-        }
-
-        console.log(
-          `🚗 Day ${dayIndex + 1}: Calculating directions for ${
-            places.length
-          } places`
-        );
-
-        try {
-          // Call directions API for this day
-          const directionsResponse: DirectionsResponse =
-            await calculateDirections(places);
-
-          // Check if this is a fallback straight-line response
-          if (directionsResponse.isFallbackStraightLine) {
-            console.warn(
-              `⚠️ Day ${
-                dayIndex + 1
-              }: No driving route found, using straight-line fallback`
-            );
-          }
-
-          // Extract driving times and distances
-          const { times, distances } = await extractDrivingTimes(
-            directionsResponse,
-            places
-          );
-
-          // Store driving times by UID
-          places.forEach((place, index) => {
-            if (place.uid) {
-              drivingTimesByUid[place.uid] = {
-                time: times[index] || 0,
-                distance: distances[index] || 0,
-              };
-            }
-          });
-
-          // Store directions result for map rendering
-          directionsResults.push({
-            dayIndex,
-            color: getDayColor(dayIndex),
-            directionsResult: directionsResponse,
-          });
-
-          const routeType = directionsResponse.isFallbackStraightLine
-            ? "straight-line fallback"
-            : "driving route";
-          console.log(
-            `✅ Day ${dayIndex + 1}: ${routeType} calculated successfully`
-          );
-        } catch (error) {
-          console.error(
-            `❌ Day ${dayIndex + 1}: Error calculating directions:`,
-            error
-          );
-        }
-      }
-
-      // Update place blocks with driving times
+      // Update place blocks with driving times (editor-specific functionality)
       await updatePlaceBlocksWithDrivingTimes(editorRef, drivingTimesByUid);
 
       // Update the allPlaces array with driving times for return
@@ -525,17 +446,12 @@ export default function ItineraryEditor({
         return place;
       });
 
-      const fallbackCount = directionsResults.filter(
-        (r) => r.directionsResult.isFallbackStraightLine
-      ).length;
-      const realRoutesCount = directionsResults.length - fallbackCount;
-
       console.log(
-        `✅ ItineraryEditor: Directions refresh completed - ${realRoutesCount} driving routes, ${fallbackCount} straight-line fallbacks`
+        `✅ ItineraryEditor: Directions refresh completed - ${directions.length} routes`
       );
 
       return {
-        directions: directionsResults,
+        directions,
         updatedPlaces,
       };
     } catch (error) {

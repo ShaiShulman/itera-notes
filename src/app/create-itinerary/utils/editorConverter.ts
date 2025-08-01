@@ -61,8 +61,8 @@ export function convertItineraryToEditorData(
           status: place.status || "found",
           // Default values for fields not in our enriched data
           notes: "",
-          drivingTimeFromPrevious: 0,
-          drivingDistanceFromPrevious: 0,
+          drivingTimeFromPrevious: place.drivingTimeFromPrevious || 0,
+          drivingDistanceFromPrevious: place.drivingDistanceFromPrevious || 0,
         })),
       },
     };
@@ -99,8 +99,8 @@ export function convertItineraryToEditorData(
           status: place.status || "found",
           // Default values for fields not in our enriched data
           notes: "",
-          drivingTimeFromPrevious: 0,
-          drivingDistanceFromPrevious: 0,
+          drivingTimeFromPrevious: place.drivingTimeFromPrevious || 0,
+          drivingDistanceFromPrevious: place.drivingDistanceFromPrevious || 0,
           // Additional metadata
           dayNumber: day.dayNumber,
           orderInDay: i,

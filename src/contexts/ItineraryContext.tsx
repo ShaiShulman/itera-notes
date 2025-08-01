@@ -14,6 +14,7 @@ import {
   PlaceLocation,
 } from "@/services/openai/itinerary";
 import { EditorData } from "@/features/editor/types";
+import { DirectionsData } from "@/features/directions/types";
 
 // localStorage constants
 const STORAGE_KEY = "itera-notes-itinerary-state";
@@ -82,6 +83,9 @@ export interface ItineraryState {
   // Editor.js data representation
   editorData: EditorData | null;
 
+  // Driving directions data for map visualization
+  directionsData: DirectionsData[];
+
   // Loading and error states
   isLoading: boolean;
   error: string | null;
@@ -100,6 +104,7 @@ export type ItineraryAction =
   | { type: "SET_ERROR"; payload: string | null }
   | { type: "SET_ITINERARY"; payload: GeneratedItinerary }
   | { type: "SET_EDITOR_DATA"; payload: EditorData }
+  | { type: "SET_DIRECTIONS_DATA"; payload: DirectionsData[] }
   | {
       type: "UPDATE_DAY";
       payload: { dayNumber: number; day: Partial<ItineraryDay> };
@@ -130,6 +135,7 @@ export type ItineraryAction =
 const initialState: ItineraryState = {
   currentItinerary: null,
   editorData: null,
+  directionsData: [],
   isLoading: false,
   error: null,
   lastUpdated: null,
@@ -161,6 +167,8 @@ function itineraryReducer(
       return {
         ...state,
         currentItinerary: action.payload,
+        // Clear directions data when setting new itinerary - new places need new routes
+        directionsData: [],
         lastUpdated: new Date(),
         isDirty: false,
         isLoading: false,
@@ -171,6 +179,14 @@ function itineraryReducer(
       return {
         ...state,
         editorData: action.payload,
+        lastUpdated: new Date(),
+        isDirty: true,
+      };
+
+    case "SET_DIRECTIONS_DATA":
+      return {
+        ...state,
+        directionsData: action.payload,
         lastUpdated: new Date(),
         isDirty: true,
       };
@@ -232,6 +248,8 @@ function itineraryReducer(
               : day
           ),
         },
+        // Clear directions data when places are added - routes need recalculation
+        directionsData: [],
         lastUpdated: new Date(),
         isDirty: true,
       };
@@ -254,6 +272,8 @@ function itineraryReducer(
               : day
           ),
         },
+        // Clear directions data when places are removed - routes need recalculation
+        directionsData: [],
         lastUpdated: new Date(),
         isDirty: true,
       };
@@ -278,6 +298,8 @@ function itineraryReducer(
               : day
           ),
         },
+        // Clear directions data when places are reordered - routes need recalculation
+        directionsData: [],
         lastUpdated: new Date(),
         isDirty: true,
       };
@@ -329,6 +351,7 @@ interface ItineraryContextValue {
   setError: (error: string | null) => void;
   setItinerary: (itinerary: GeneratedItinerary) => void;
   setEditorData: (data: EditorData) => void;
+  setDirectionsData: (directions: DirectionsData[]) => void;
   updateDay: (dayNumber: number, day: Partial<ItineraryDay>) => void;
   updatePlace: (
     dayNumber: number,
@@ -395,6 +418,10 @@ export function ItineraryProvider({ children }: ItineraryProviderProps) {
 
   const setEditorData = useCallback((data: EditorData) => {
     dispatch({ type: "SET_EDITOR_DATA", payload: data });
+  }, []);
+
+  const setDirectionsData = useCallback((directions: DirectionsData[]) => {
+    dispatch({ type: "SET_DIRECTIONS_DATA", payload: directions });
   }, []);
 
   const updateDay = useCallback(
@@ -475,6 +502,7 @@ export function ItineraryProvider({ children }: ItineraryProviderProps) {
     setError,
     setItinerary,
     setEditorData,
+    setDirectionsData,
     updateDay,
     updatePlace,
     addPlace,

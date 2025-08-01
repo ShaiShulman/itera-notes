@@ -30,7 +30,7 @@ interface FormErrors {
 
 function NewItineraryForm() {
   const router = useRouter();
-  const { setItinerary, setEditorData } = useItinerary();
+  const { setItinerary, setEditorData, setDirectionsData } = useItinerary();
   const { formData, updateFormData, isFormDirty } = useCreateItineraryForm();
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
@@ -114,12 +114,24 @@ function NewItineraryForm() {
       if (actionResult.success && actionResult.data) {
         console.log("Generated itinerary:", actionResult.data);
 
+        if (actionResult.directions && actionResult.directions.length > 0) {
+          setLoadingMessage("Calculating driving routes...");
+        }
+
         // Store itinerary in context
         setItinerary(actionResult.data);
 
         // Convert to editor data format and store
         const editorData = convertItineraryToEditorData(actionResult.data);
         setEditorData(editorData);
+
+        // Store directions in context if available
+        if (actionResult.directions) {
+          setDirectionsData(actionResult.directions);
+          console.log(
+            `✅ Stored ${actionResult.directions.length} direction routes in context`
+          );
+        }
 
         // Keep form data in localStorage for when user navigates back
         // Don't clear form data after successful generation

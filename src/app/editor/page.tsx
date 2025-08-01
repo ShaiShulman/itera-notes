@@ -69,9 +69,8 @@ function deepCompareEditorData(a: EditorData | undefined, b: EditorData | undefi
 }
 
 export default function EditorPage() {
-  const { state, setEditorData } = useItinerary();
+  const { state, setEditorData, setDirectionsData } = useItinerary();
   const [localEditorData, setLocalEditorData] = useState<EditorData | undefined>();
-  const [directionsData, setDirectionsData] = useState<any[]>([]);
   const editorRefreshFnRef = useRef<(() => Promise<any>) | null>(null);
   const isUpdatingFromEditor = useRef(false);
 
@@ -231,7 +230,7 @@ export default function EditorPage() {
               <div className="flex-1 min-h-0">
                 <ItineraryMap
                   editorData={memoizedBlocks}
-                  directionsData={directionsData}
+                  directionsData={state.directionsData}
                   onRefreshDirections={handleRefreshDirections}
                   className="h-full"
                 />
