@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useItinerary } from "@/contexts/ItineraryContext";
+import { AuthProtected } from "@/features/auth/components/AuthProtected";
 import {
   CreateItineraryProvider,
   useCreateItineraryForm,
@@ -479,8 +480,10 @@ function NewItineraryForm() {
 
 export default function NewItinerary() {
   return (
-    <CreateItineraryProvider>
-      <NewItineraryForm />
-    </CreateItineraryProvider>
+    <AuthProtected>
+      <CreateItineraryProvider>
+        <NewItineraryForm />
+      </CreateItineraryProvider>
+    </AuthProtected>
   );
 }
