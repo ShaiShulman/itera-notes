@@ -49,6 +49,10 @@ RUN chown nextjs:nodejs .next
 RUN mkdir -p /app/logs
 RUN chown nextjs:nodejs /app/logs
 
+# Create database directory and set proper permissions
+RUN mkdir -p /app/src/services/database
+RUN chown nextjs:nodejs /app/src/services/database
+
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
@@ -58,8 +62,8 @@ USER nextjs
 
 EXPOSE 3000
 
-# Create volume for logs persistence
-VOLUME ["/app/logs"]
+# Create volumes for logs and database persistence
+VOLUME ["/app/logs", "/app/src/services/database"]
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
