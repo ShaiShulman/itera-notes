@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { MapIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
 import dynamic from "next/dynamic";
 import { useItinerary } from "@/contexts/ItineraryContext";
+import { AuthProtected } from "@/features/auth/components/AuthProtected";
 import { convertItineraryToEditorData } from "@/app/create-itinerary/utils/editorConverter";
 
 // Import from feature structure
@@ -68,7 +69,7 @@ function deepCompareEditorData(a: EditorData | undefined, b: EditorData | undefi
   return true;
 }
 
-export default function EditorPage() {
+function EditorPageContent() {
   const { state, setEditorData, setDirectionsData } = useItinerary();
   const [localEditorData, setLocalEditorData] = useState<EditorData | undefined>();
   const editorRefreshFnRef = useRef<(() => Promise<any>) | null>(null);
@@ -240,5 +241,13 @@ export default function EditorPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function EditorPage() {
+  return (
+    <AuthProtected>
+      <EditorPageContent />
+    </AuthProtected>
   );
 }
