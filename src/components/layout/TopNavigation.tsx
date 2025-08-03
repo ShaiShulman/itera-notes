@@ -2,51 +2,55 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut, signIn } from "next-auth/react";
 import {
-  MapIcon,
-  ListBulletIcon,
-  MagnifyingGlassIcon,
-  Cog6ToothIcon,
-  QuestionMarkCircleIcon,
-  PlusIcon,
-} from "@heroicons/react/24/outline";
+  HiOutlineMap,
+  HiOutlineClipboardDocumentList,
+  HiOutlineMagnifyingGlass,
+  HiOutlineCog6Tooth,
+  HiOutlineQuestionMarkCircle,
+  HiOutlinePlus,
+  HiOutlineUser,
+  HiOutlineArrowRightOnRectangle,
+} from "react-icons/hi2";
 
 const navigationItems = [
   {
     name: "Create Itinerary",
     href: "/create-itinerary",
-    icon: PlusIcon,
+    icon: HiOutlinePlus,
     primary: true,
   },
   {
     name: "Itinerary Editor",
     href: "/editor",
-    icon: MapIcon,
+    icon: HiOutlineMap,
   },
   {
     name: "My Itineraries",
     href: "/itineraries",
-    icon: ListBulletIcon,
+    icon: HiOutlineClipboardDocumentList,
   },
   {
     name: "Place Explorer",
     href: "/places",
-    icon: MagnifyingGlassIcon,
+    icon: HiOutlineMagnifyingGlass,
   },
   {
     name: "Settings",
     href: "/settings",
-    icon: Cog6ToothIcon,
+    icon: HiOutlineCog6Tooth,
   },
   {
     name: "Help",
     href: "/help",
-    icon: QuestionMarkCircleIcon,
+    icon: HiOutlineQuestionMarkCircle,
   },
 ];
 
 export default function TopNavigation() {
   const pathname = usePathname();
+  const { data: session } = useSession();
 
   return (
     <nav className="bg-slate-900 border-b border-slate-700 shadow-lg">
@@ -62,9 +66,9 @@ export default function TopNavigation() {
           </div>
 
           {/* Navigation Items */}
-          <div className="hidden md:block">
-            <div className="ml-10 flex items-baseline space-x-2">
-              {navigationItems.map((item) => {
+          <div className="hidden md:block flex-1 flex justify-center">
+            <div className="flex items-baseline space-x-2">
+              {session && navigationItems.map((item) => {
                 const isActive = pathname === item.href;
                 const Icon = item.icon;
 
@@ -88,6 +92,37 @@ export default function TopNavigation() {
                   </Link>
                 );
               })}
+            </div>
+          </div>
+
+          {/* User Menu */}
+          <div className="hidden md:block">
+            <div className="flex items-center space-x-3">
+              {session ? (
+                <>
+                  <div className="flex items-center space-x-2">
+                    <HiOutlineUser className="h-6 w-6 text-slate-300" />
+                    <span className="text-sm text-slate-300">
+                      {session.user?.name || session.user?.email}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => signOut()}
+                    className="flex items-center space-x-1 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+                  >
+                    <HiOutlineArrowRightOnRectangle className="h-4 w-4" />
+                    <span>Sign out</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => signIn("google")}
+                  className="flex items-center space-x-1 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+                >
+                  <HiOutlineUser className="h-4 w-4" />
+                  <span>Sign in</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -122,7 +157,7 @@ export default function TopNavigation() {
       {/* Mobile menu */}
       <div className="md:hidden" id="mobile-menu">
         <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-slate-800">
-          {navigationItems.map((item) => {
+          {session && navigationItems.map((item) => {
             const isActive = pathname === item.href;
             const Icon = item.icon;
 
@@ -146,6 +181,40 @@ export default function TopNavigation() {
               </Link>
             );
           })}
+          
+          {/* Mobile user menu */}
+          {session ? (
+            <div className="border-t border-slate-700 pt-4 mt-4">
+              <div className="flex items-center px-3 py-2">
+                <HiOutlineUser className="h-10 w-10 text-slate-300" />
+                <div className="ml-3">
+                  <div className="text-base font-medium text-white">
+                    {session.user?.name}
+                  </div>
+                  <div className="text-sm font-medium text-slate-400">
+                    {session.user?.email}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => signOut()}
+                className="flex items-center space-x-3 px-3 py-2 rounded-md text-base font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition-colors w-full text-left"
+              >
+                <HiOutlineArrowRightOnRectangle className="h-5 w-5" />
+                <span>Sign out</span>
+              </button>
+            </div>
+          ) : (
+            <div className="border-t border-slate-700 pt-4 mt-4">
+              <button
+                onClick={() => signIn("google")}
+                className="flex items-center space-x-3 px-3 py-2 rounded-md text-base font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition-colors w-full text-left"
+              >
+                <HiOutlineUser className="h-5 w-5" />
+                <span>Sign in</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </nav>
