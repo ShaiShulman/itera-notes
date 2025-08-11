@@ -96,6 +96,10 @@ async function extractPlacesDataFromEditor(editorRef: any): Promise<{
   }
 
   try {
+    if (!editorRef.current || typeof editorRef.current.save !== "function") {
+      console.warn("Editor not ready for save operation");
+      return { placesByDay: {}, allPlaces: [] };
+    }
     const outputData = await editorRef.current.save();
     const blocks = outputData.blocks || [];
 
@@ -167,6 +171,10 @@ async function extractPlacesFromDay(
   }
 
   try {
+    if (!editorRef.current || typeof editorRef.current.save !== "function") {
+      console.warn("Editor not ready for save operation");
+      return [];
+    }
     const outputData = await editorRef.current.save();
     const blocks = outputData.blocks || [];
 
@@ -499,6 +507,13 @@ export default function ItineraryEditor({
             console.log("ItineraryEditor: Content changed");
             if (onChange && editorRef.current) {
               try {
+                if (
+                  !editorRef.current ||
+                  typeof editorRef.current.save !== "function"
+                ) {
+                  console.warn("Editor not ready for save operation");
+                  return;
+                }
                 const outputData = await editorRef.current.save();
                 onChange({ ...outputData, time: undefined });
 
@@ -771,6 +786,22 @@ export default function ItineraryEditor({
       if (blockType === "day") {
         try {
           // Use editor's save method to get current data reliably
+          if (
+            !editorRef.current ||
+            typeof editorRef.current.save !== "function"
+          ) {
+            console.warn(
+              "Editor not ready for save operation, skipping date calculation"
+            );
+            return;
+          }
+          if (
+            !editorRef.current ||
+            typeof editorRef.current.save !== "function"
+          ) {
+            console.warn("Editor not ready for save operation");
+            return;
+          }
           const outputData = await editorRef.current.save();
           const blocks = outputData.blocks || [];
 
