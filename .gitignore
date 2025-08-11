@@ -52,3 +52,7 @@ logs/
 # cache
 .claude/
 .cache/
+
+# database
+prisma/prisma/dev.db
+prisma/migrations/

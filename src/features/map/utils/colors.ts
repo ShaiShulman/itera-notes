@@ -4,7 +4,14 @@ import { DAY_COLORS, DayColor } from "../types";
  * Get color for a specific day index
  */
 export function getDayColor(dayIndex: number): DayColor {
-  return DAY_COLORS[dayIndex % DAY_COLORS.length];
+  // Ensure dayIndex is non-negative
+  if (dayIndex < 0) {
+    console.warn(`getDayColor: Invalid dayIndex ${dayIndex}, using 0`);
+    dayIndex = 0;
+  }
+  
+  const colorIndex = Math.floor(dayIndex) % DAY_COLORS.length;
+  return DAY_COLORS[colorIndex];
 }
 
 /**

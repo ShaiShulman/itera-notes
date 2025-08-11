@@ -16,9 +16,9 @@ import { getDayColor } from "@/features/map/utils/colors";
  * Extract places from GeneratedItinerary grouped by day
  */
 export async function extractPlacesFromItinerary(itinerary: GeneratedItinerary): Promise<{
-  [dayNumber: number]: PlaceCoordinate[];
+  [dayIndex: number]: PlaceCoordinate[];
 }> {
-  const placesByDay: { [dayNumber: number]: PlaceCoordinate[] } = {};
+  const placesByDay: { [dayIndex: number]: PlaceCoordinate[] } = {};
 
   itinerary.days.forEach((day) => {
     const places: PlaceCoordinate[] = [];
@@ -37,7 +37,9 @@ export async function extractPlacesFromItinerary(itinerary: GeneratedItinerary):
     });
 
     if (places.length > 0) {
-      placesByDay[day.dayNumber] = places;
+      // Use 0-based dayIndex (dayNumber - 1) for consistency with editor extraction
+      const dayIndex = day.dayNumber - 1;
+      placesByDay[dayIndex] = places;
     }
   });
 
@@ -54,7 +56,7 @@ export async function extractPlacesFromItinerary(itinerary: GeneratedItinerary):
  * Calculate directions for multiple days
  */
 export async function calculateDirectionsForDays(placesByDay: {
-  [dayNumber: number]: PlaceCoordinate[];
+  [dayIndex: number]: PlaceCoordinate[];
 }): Promise<{
   directions: DirectionsData[];
   drivingTimesByUid: { [uid: string]: { time: number; distance: number } };
@@ -65,8 +67,9 @@ export async function calculateDirectionsForDays(placesByDay: {
   } = {};
 
   // Calculate directions for each day with at least 2 places
-  for (const [dayNumberStr, places] of Object.entries(placesByDay)) {
-    const dayNumber = parseInt(dayNumberStr);
+  for (const [dayIndexStr, places] of Object.entries(placesByDay)) {
+    const dayIndex = parseInt(dayIndexStr); // This is actually 0-based dayIndex, not 1-based dayNumber
+    const dayNumber = dayIndex + 1; // Convert to 1-based for display
 
     if (places.length < 2) {
       console.log(
@@ -113,10 +116,25 @@ export async function calculateDirectionsForDays(placesByDay: {
       });
 
       // Store directions result for map rendering
-      // Note: DirectionsData expects dayIndex (0-based) for map rendering
+      // dayIndex is already 0-based, no conversion needed
+      
+      // Validate dayIndex is valid (non-negative)
+      if (dayIndex < 0) {
+        console.warn(`⚠️ Skipping directions for invalid dayIndex: ${dayIndex}`);
+        continue;
+      }
+      
+      const dayColor = getDayColor(dayIndex);
+      
+      // Validate color is valid
+      if (!dayColor) {
+        console.warn(`⚠️ Skipping directions for dayIndex ${dayIndex} - no color available`);
+        continue;
+      }
+      
       directionsResults.push({
-        dayIndex: dayNumber - 1, // Convert dayNumber (1-based) to dayIndex (0-based) for map
-        color: getDayColor(dayNumber - 1),
+        dayIndex,
+        color: dayColor,
         directionsResult: directionsResponse,
       });
 
