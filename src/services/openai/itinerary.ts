@@ -108,7 +108,7 @@ export async function generateItinerary(
       startDate,
       totalDays
     );
-    console.log("parsedItinerary", parsedItinerary);
+    console.log("parsedItinerary", JSON.stringify(parsedItinerary, null, 2));
 
     // Enrich places with Google Places API data
     const enrichedItinerary = await enrichPlacesWithGoogleData(parsedItinerary);

@@ -38,22 +38,31 @@ export function ItineraryMap({
 
   // Memoize the transformation to prevent infinite re-renders
   const mapData = useMemo(() => {
-    const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
-    console.log(`🗺️ [${timestamp}] ItineraryMap: useMemo triggered - transforming editorData:`, editorData?.length || 0, "blocks");
-    console.log(`🗺️ [${timestamp}] ItineraryMap: data hash:`, dataHash);
-    console.log(`🗺️ [${timestamp}] ItineraryMap: directionsData:`, directionsData?.length || 0, "routes");
+    const timestamp = new Date().toISOString().split("T")[1].split(".")[0];
+    console.log(
+      `🗺️ [${timestamp}] ItineraryMap: directionsData:`,
+      directionsData?.length || 0,
+      "routes"
+    );
 
     if (editorData && editorData.length > 0) {
-      console.log(`🗺️ [${timestamp}] ItineraryMap: Calling transformEditorDataToMapData...`);
+      console.log(
+        `🗺️ [${timestamp}] ItineraryMap: Calling transformEditorDataToMapData...`
+      );
       const result = transformEditorDataToMapData(editorData);
 
       // Add directions data if available
       if (directionsData && directionsData.length > 0) {
         result.directions = directionsData;
-        console.log(`🗺️ [${timestamp}] ItineraryMap: Added ${directionsData.length} direction routes to result`);
+        console.log(
+          `🗺️ [${timestamp}] ItineraryMap: Added ${directionsData.length} direction routes to result`
+        );
       }
 
-      console.log(`🗺️ [${timestamp}] ItineraryMap: transformation result:`, result);
+      console.log(
+        `🗺️ [${timestamp}] ItineraryMap: transformation result:`,
+        result
+      );
       return result;
     }
 
@@ -63,8 +72,12 @@ export function ItineraryMap({
       places: [],
       directions: directionsData || [],
     };
-    console.log(`🗺️ [${timestamp}] ItineraryMap: returning empty result:`, emptyResult);
+    console.log(
+      `🗺️ [${timestamp}] ItineraryMap: returning empty result:`,
+      emptyResult
+    );
     return emptyResult;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataHash, directionsData]); // Back to using hash for optimization
 
   const handlePlaceClick = useCallback(
@@ -114,7 +127,9 @@ export function ItineraryMap({
             <button
               onClick={() => setIsLegendCollapsed(!isLegendCollapsed)}
               className="p-1 hover:bg-slate-100 rounded transition-colors"
-              aria-label={isLegendCollapsed ? "Expand legend" : "Collapse legend"}
+              aria-label={
+                isLegendCollapsed ? "Expand legend" : "Collapse legend"
+              }
             >
               <svg
                 className={`w-4 h-4 text-slate-600 transition-transform ${
@@ -133,12 +148,15 @@ export function ItineraryMap({
               </svg>
             </button>
           </div>
-          
+
           {/* Legend Content - Collapsible */}
           {!isLegendCollapsed && (
             <div className="px-3 pb-3 space-y-2 max-h-48 overflow-y-auto">
               {mapData.days.map((day) => (
-                <div key={day.index} className="flex items-center gap-2 text-xs">
+                <div
+                  key={day.index}
+                  className="flex items-center gap-2 text-xs"
+                >
                   <div
                     className="w-3 h-3 rounded-full border border-white shadow-sm flex-shrink-0"
                     style={{ backgroundColor: day.color }}
