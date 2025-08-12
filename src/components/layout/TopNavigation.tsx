@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut, signIn } from "next-auth/react";
+import { useSession, signOut, signIn } from "next-auth/react";
 import {
   HiOutlineMap,
   HiOutlineClipboardDocumentList,
@@ -18,11 +19,13 @@ const navigationItems = [
     name: "Create Itinerary",
     href: "/create-itinerary",
     icon: HiOutlinePlus,
+    icon: HiOutlinePlus,
     primary: true,
   },
   {
     name: "Itinerary Editor",
     href: "/editor",
+    icon: HiOutlineMap,
     icon: HiOutlineMap,
   },
   {
@@ -34,16 +37,19 @@ const navigationItems = [
     name: "Settings",
     href: "/settings",
     icon: HiOutlineCog6Tooth,
+    icon: HiOutlineCog6Tooth,
   },
   {
     name: "Help",
     href: "/help",
+    icon: HiOutlineQuestionMarkCircle,
     icon: HiOutlineQuestionMarkCircle,
   },
 ];
 
 export default function TopNavigation() {
   const pathname = usePathname();
+  const { data: session } = useSession();
   const { data: session } = useSession();
 
   return (
@@ -87,6 +93,37 @@ export default function TopNavigation() {
                     </Link>
                   );
                 })}
+            </div>
+          </div>
+
+          {/* User Menu */}
+          <div className="hidden md:block">
+            <div className="flex items-center space-x-3">
+              {session ? (
+                <>
+                  <div className="flex items-center space-x-2">
+                    <HiOutlineUser className="h-6 w-6 text-slate-300" />
+                    <span className="text-sm text-slate-300">
+                      {session.user?.name || session.user?.email}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => signOut()}
+                    className="flex items-center space-x-1 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+                  >
+                    <HiOutlineArrowRightOnRectangle className="h-4 w-4" />
+                    <span>Sign out</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => signIn("google")}
+                  className="flex items-center space-x-1 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+                >
+                  <HiOutlineUser className="h-4 w-4" />
+                  <span>Sign in</span>
+                </button>
+              )}
             </div>
           </div>
 

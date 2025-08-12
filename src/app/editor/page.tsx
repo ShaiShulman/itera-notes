@@ -9,11 +9,12 @@ import EditorPageContent from "@/components/EditorPageContent";
 function EditorPageWithRedirect() {
   const router = useRouter();
   const { state } = useItinerary();
-  
+
   // Check immediately if we have a fresh redirect flag (to avoid any flash)
-  const hasFreshFlag = typeof window !== 'undefined' && 
-    sessionStorage.getItem('fresh-from-create') === 'true';
-    
+  const hasFreshFlag =
+    typeof window !== "undefined" &&
+    sessionStorage.getItem("fresh-from-create") === "true";
+
   const [isRedirecting, setIsRedirecting] = useState(hasFreshFlag);
 
   useEffect(() => {
@@ -26,29 +27,35 @@ function EditorPageWithRedirect() {
           if (!state.currentItineraryId || !state.editorData) {
             return;
           }
-          
+
           // Check if this is a fresh itinerary that should get a slug URL
-          const isFreshFromCreate = typeof window !== 'undefined' && 
-            sessionStorage.getItem('fresh-from-create') === 'true';
-          
+          const isFreshFromCreate =
+            typeof window !== "undefined" &&
+            sessionStorage.getItem("fresh-from-create") === "true";
+
           if (isFreshFromCreate) {
             console.log("📍 Redirecting fresh itinerary to slug URL");
             setIsRedirecting(true);
-            
+
             // Import the slug generation utility
-            const { generateItinerarySlug, extractItineraryStats } = await import("@/utils/itinerary");
-            
+            const { generateItinerarySlug, extractItineraryStats } =
+              await import("@/utils/itinerary");
+
             // Generate slug from the current itinerary data
             const stats = extractItineraryStats(state.editorData);
-            const slug = generateItinerarySlug(stats.title, state.currentItineraryId, state.editorData);
-            
+            const slug = generateItinerarySlug(
+              stats.title,
+              state.currentItineraryId,
+              state.editorData
+            );
+
             // Clear the fresh flags since we're handling the redirect
-            if (typeof window !== 'undefined') {
-              sessionStorage.removeItem('fresh-from-create');
-              sessionStorage.removeItem('fresh-from-create-timestamp');
-              sessionStorage.removeItem('fresh-itinerary-id');
+            if (typeof window !== "undefined") {
+              sessionStorage.removeItem("fresh-from-create");
+              sessionStorage.removeItem("fresh-from-create-timestamp");
+              sessionStorage.removeItem("fresh-itinerary-id");
             }
-            
+
             // Redirect to the slug URL
             router.replace(`/editor/${slug}`);
           } else if (isRedirecting) {
