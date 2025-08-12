@@ -14,6 +14,25 @@ import { AutocompleteLocationBias } from "@/features/autocomplete/types";
 import { findPlaceByNameAction } from "../actions/places";
 import { createImageSkeleton } from "@/components/ui/skeleton";
 
+// Debounce mechanism for place numbering updates
+let numberingUpdateTimeout: NodeJS.Timeout | null = null;
+
+// Global utility function to trigger place numbering updates
+export function triggerPlaceNumberingUpdate() {
+  if (typeof window !== "undefined") {
+    // Debounce the numbering updates to avoid excessive triggering
+    if (numberingUpdateTimeout) {
+      clearTimeout(numberingUpdateTimeout);
+    }
+    
+    numberingUpdateTimeout = setTimeout(() => {
+      console.log("🔢 Triggering global place numbering update");
+      window.dispatchEvent(new CustomEvent("editor:updatePlaceNumbers"));
+      numberingUpdateTimeout = null;
+    }, 200); // 200ms debounce
+  }
+}
+
 export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
   protected data: T;
   protected wrapper: HTMLElement | null = null;
@@ -48,6 +67,12 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         "editor:updateDrivingTimes",
         this.handleDrivingTimeUpdate
       );
+      
+      // Listen for place numbering updates
+      window.addEventListener(
+        "editor:updatePlaceNumbers",
+        this.handlePlaceNumberingUpdate
+      );
     }
 
     // Listen for map bounds changes
@@ -70,6 +95,34 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       }
 
       console.log(`🚗 ${this.blockType}: Updated driving time to ${time}m`);
+    }
+  };
+
+  // Handler for place numbering updates
+  private handlePlaceNumberingUpdate = () => {
+    // Only update numbering if the block is currently rendered and collapsed (where numbering is shown)
+    if (this.wrapper && !this.isExpanded && !this.isCurrentlyEditing()) {
+      // Check if the number actually changed before re-rendering
+      const currentNumber = this.calculatePlaceNumber();
+      const existingNumberBadge = this.wrapper.querySelector('div[style*="border-radius: 50%"]') as HTMLElement;
+      
+      if (existingNumberBadge) {
+        const existingNumber = existingNumberBadge.textContent;
+        const expectedNumber = this.getPlaceNumberDisplay(currentNumber);
+        
+        if (existingNumber === expectedNumber) {
+          // Number hasn't changed, no need to re-render
+          return;
+        }
+        
+        // Only update the number badge to avoid refreshing photos
+        existingNumberBadge.textContent = expectedNumber;
+        console.log(`🔢 ${this.blockType}: Updated place number for ${this.data.name} from ${existingNumber} to ${expectedNumber}`);
+      } else {
+        // Number badge doesn't exist, need full re-render
+        console.log(`🔢 ${this.blockType}: Full re-render needed for numbering ${this.data.name}`);
+        this.renderCollapsed();
+      }
     }
   };
 
@@ -330,7 +383,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
 
     // Start in editing mode if no place is set
     const shouldStartEditing = !this.data.placeId && !this.data.name;
-    this.renderCollapsed(shouldStartEditing);
+    
+    // Use setTimeout to ensure DOM is fully updated before calculating place numbers
+    setTimeout(() => {
+      this.renderCollapsed(shouldStartEditing);
+    }, 0);
 
     // Add click handler for expand/collapse (only when not editing)
     this.wrapper.addEventListener("click", (e) => {
@@ -406,13 +463,20 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
   }
 
   protected calculatePlaceNumber(): number {
-    // Find this place's position among all blocks of the same type within the same day
+    // Find this place's position among blocks of the SAME TYPE within the same day
     const editorElement = this.wrapper?.closest(".codex-editor");
-    if (!editorElement) return 1;
+    if (!editorElement) {
+      console.log(`${this.blockType}: No editor element found, returning 1`);
+      return 1;
+    }
 
     const allBlocks = editorElement.querySelectorAll(".ce-block");
     let placeNumberInDay = 1;
     let foundCurrentPlace = false;
+    let currentDay = 0;
+    const blockTypeClass = `.${this.blockType.toLowerCase()}-block`;
+
+    console.log(`${this.blockType}: Calculating number for "${this.data.name}" among ${allBlocks.length} blocks`);
 
     // Find all blocks and track day/place progression
     for (let i = 0; i < allBlocks.length; i++) {
@@ -420,11 +484,18 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
 
       // Check if this block contains a day block
       if (block.querySelector(".day-block")) {
+        currentDay++;
         placeNumberInDay = 1; // Reset place counter for new day
+        console.log(`${this.blockType}: Found day ${currentDay}, resetting counter to 1`);
       }
-      // Check if this block contains a block of the same type as this one
-      else if (block.querySelector(`.${this.blockType.toLowerCase()}-block`)) {
-        if (block.contains(this.wrapper)) {
+      // Check if this block contains a block of the SAME TYPE as this one
+      else if (block.querySelector(blockTypeClass)) {
+        const blockElement = block.querySelector(blockTypeClass);
+        const isCurrentBlock = blockElement && blockElement.contains(this.wrapper);
+        
+        console.log(`${this.blockType}: Found ${this.blockType.toLowerCase()} block #${placeNumberInDay} in day ${currentDay}${isCurrentBlock ? ' (THIS BLOCK)' : ''}`);
+        
+        if (isCurrentBlock) {
           foundCurrentPlace = true;
           break;
         }
@@ -432,14 +503,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       }
     }
 
+    const finalNumber = foundCurrentPlace ? placeNumberInDay : 1;
     console.log(
-      `${
-        this.blockType
-      }: Calculated ${this.blockType.toLowerCase()} number ${placeNumberInDay} for ${
-        this.data.name
-      }`
+      `${this.blockType}: Final calculated number ${finalNumber} for "${this.data.name}" (found=${foundCurrentPlace})`
     );
-    return foundCurrentPlace ? placeNumberInDay : 1;
+    return finalNumber;
   }
 
   protected renderCollapsed(isEditing: boolean = false) {
@@ -1674,11 +1742,15 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       this.boundsChangeCleanup = null;
     }
 
-    // Cleanup driving time listener
+    // Cleanup event listeners
     if (typeof window !== "undefined") {
       window.removeEventListener(
         "editor:updateDrivingTimes",
         this.handleDrivingTimeUpdate
+      );
+      window.removeEventListener(
+        "editor:updatePlaceNumbers",
+        this.handlePlaceNumberingUpdate
       );
     }
 

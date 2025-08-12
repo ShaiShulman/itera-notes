@@ -18,6 +18,7 @@ import {
   calculateDayBounds,
   emitFitDayBounds,
 } from "@/features/map/boundsManager";
+import { triggerPlaceNumberingUpdate } from "./BasePlaceBlock";
 import HeaderBlock from "@editorjs/header";
 import ParagraphBlock from "@editorjs/paragraph";
 import "./editorjs-global.css";
@@ -39,7 +40,7 @@ interface EditorBlocks {
 }
 
 // Helper function to find insertion point after a day block
-function findInsertionPointAfterDay(dayBlockElement: HTMLElement): number {
+function findInsertionPointAfterDay(dayBlockElement: HTMLElement, blockType: string = ""): number {
   const editorElement = dayBlockElement.closest(".codex-editor");
   if (!editorElement) {
     console.error("findInsertionPointAfterDay: Could not find editor element");
@@ -67,23 +68,46 @@ function findInsertionPointAfterDay(dayBlockElement: HTMLElement): number {
     return -1;
   }
 
-  // Find the next day block (if any)
+  // Find the next day block to determine the boundary of current day
+  let nextDayIndex = allBlocks.length; // Default to end if no next day found
   for (let i = dayBlockIndex + 1; i < allBlocks.length; i++) {
     const block = allBlocks[i];
     if (block.querySelector(".day-block")) {
-      // Found next day block, insert before it
-      console.log(
-        `findInsertionPointAfterDay: Found next day at index ${i}, inserting before it`
-      );
-      return i;
+      nextDayIndex = i;
+      console.log(`findInsertionPointAfterDay: Found next day at index ${i}`);
+      break;
     }
   }
 
-  // No next day found, insert at the end (after all current blocks)
+  // If adding a place, find optimal position: after places, before hotels
+  if (blockType === "place") {
+    let lastPlaceIndex = dayBlockIndex; // Start after the day block
+    let firstHotelIndex = nextDayIndex; // Default to end of day
+    
+    // Scan blocks between current day and next day
+    for (let i = dayBlockIndex + 1; i < nextDayIndex; i++) {
+      const block = allBlocks[i];
+      
+      if (block.querySelector(".place-block")) {
+        lastPlaceIndex = i; // Track the last place block
+      } else if (block.querySelector(".hotel-block") && firstHotelIndex === nextDayIndex) {
+        firstHotelIndex = i; // Track the first hotel block (only set once)
+      }
+    }
+    
+    // Insert after the last place but before the first hotel
+    const insertIndex = lastPlaceIndex + 1;
+    console.log(
+      `findInsertionPointAfterDay: Inserting place at index ${insertIndex} (after last place at ${lastPlaceIndex}, before first hotel at ${firstHotelIndex})`
+    );
+    return Math.min(insertIndex, firstHotelIndex);
+  }
+
+  // For hotels or any other block type, insert at the end of the day (current behavior)
   console.log(
-    `findInsertionPointAfterDay: No next day found, inserting at end (index ${allBlocks.length})`
+    `findInsertionPointAfterDay: Inserting ${blockType || 'block'} at end of day (index ${nextDayIndex})`
   );
-  return allBlocks.length;
+  return nextDayIndex;
 }
 
 // Helper function to extract places data from editor grouped by day
@@ -231,6 +255,30 @@ export default function ItineraryEditor({
   const [error, setError] = useState<string | null>(null);
   const { setSelectedPlace, state, updateDay } = useItinerary();
   const { selectedPlace } = state;
+  
+  // Track place/hotel block structure for numbering updates
+  const lastBlockStructure = useRef<string>("");
+  
+  // Generate structure hash for place/hotel blocks
+  const generateBlockStructureHash = useCallback((editorData: EditorData): string => {
+    if (!editorData.blocks) return "";
+    
+    // Create a hash based on type, position, and day for place/hotel blocks
+    const placeHotelBlocks = editorData.blocks
+      .map((block, index) => {
+        if (block.type === "place" || block.type === "hotel") {
+          const data = block.data as any;
+          return `${block.type}-${index}-${data.dayNumber || 0}-${data.name || ""}`;
+        }
+        if (block.type === "day") {
+          return `${block.type}-${index}`;
+        }
+        return null;
+      })
+      .filter(Boolean);
+    
+    return placeHotelBlocks.join("|");
+  }, []);
 
   // Function to sync editor deletions back to context
   const syncEditorDeletionsToContext = useCallback(
@@ -517,6 +565,16 @@ export default function ItineraryEditor({
                 const outputData = await editorRef.current.save();
                 onChange({ ...outputData, time: undefined });
 
+                // Check if place/hotel block structure has changed for numbering updates
+                const currentStructure = generateBlockStructureHash(outputData);
+                if (currentStructure !== lastBlockStructure.current) {
+                  console.log("🔢 Block structure changed - triggering numbering update");
+                  lastBlockStructure.current = currentStructure;
+                  setTimeout(() => {
+                    triggerPlaceNumberingUpdate();
+                  }, 100);
+                }
+                
                 // Sync editor deletions back to context with a small delay
                 // This prevents deleted places from being re-added
                 setTimeout(() => {
@@ -545,9 +603,9 @@ export default function ItineraryEditor({
               );
 
               if (editorRef.current?.blocks) {
-                // Find the insertion point - after the last block of this day, before the next day
+                // Find the insertion point - considering block type for optimal positioning
                 const insertionIndex =
-                  findInsertionPointAfterDay(dayBlockElement);
+                  findInsertionPointAfterDay(dayBlockElement, blockType);
                 console.log(
                   `ItineraryEditor: Calculated insertion index: ${insertionIndex}`
                 );
@@ -573,6 +631,13 @@ export default function ItineraryEditor({
                     `ItineraryEditor: Fallback - inserting ${blockType} at end`
                   );
                   editorRef.current.blocks.insert(blockType, initialData || {});
+                }
+                
+                // Trigger place numbering update after any place or hotel block is added
+                if (blockType === "place" || blockType === "hotel") {
+                  setTimeout(() => {
+                    triggerPlaceNumberingUpdate();
+                  }, 50); // Small delay to ensure DOM is updated
                 }
               }
             };
@@ -865,6 +930,13 @@ export default function ItineraryEditor({
       } else {
         // Insert other block types normally
         editorRef.current.blocks.insert(blockType);
+      }
+      
+      // Trigger place numbering update after any place or hotel block is added
+      if (blockType === "place" || blockType === "hotel") {
+        setTimeout(() => {
+          triggerPlaceNumberingUpdate();
+        }, 50); // Small delay to ensure DOM is updated
       }
     }
   };
