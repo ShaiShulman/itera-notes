@@ -55,6 +55,7 @@ export function attachAutocomplete(
       top: 100%;
       left: 0;
       right: 0;
+      width: 100%;
       background: white;
       border: 2px solid #10b981;
       border-top: none;
@@ -130,9 +131,14 @@ export function attachAutocomplete(
 
       // Main text (place name)
       const mainText = document.createElement("div");
+      
+      // Check if this is a hotel type and apply purple color
+      const isHotel = prediction.types.includes('lodging');
+      const textColor = isHotel ? '#8b5cf6' : '#065f46';
+      
       mainText.style.cssText = `
         font-weight: 600;
-        color: #065f46;
+        color: ${textColor};
         font-size: 14px;
         white-space: nowrap;
         overflow: hidden;
@@ -158,24 +164,8 @@ export function attachAutocomplete(
       contentContainer.appendChild(mainText);
       contentContainer.appendChild(addressText);
 
-      // Type badge
-      const typeBadge = document.createElement("div");
-      typeBadge.style.cssText = `
-        background: #f0f9ff;
-        color: #0369a1;
-        padding: 2px 6px;
-        border-radius: 10px;
-        font-size: 10px;
-        font-weight: 500;
-        flex-shrink: 0;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      `;
-      typeBadge.textContent = getPlaceTypeName(prediction.types);
-
       item.appendChild(iconContainer);
       item.appendChild(contentContainer);
-      item.appendChild(typeBadge);
 
       // Add hover effects
       item.addEventListener("mouseenter", () => {
