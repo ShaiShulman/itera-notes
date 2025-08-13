@@ -4,7 +4,12 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useItinerary } from "@/contexts/ItineraryContext";
-import { HiOutlineMap, HiOutlinePlus, HiOutlineSparkles } from "react-icons/hi2";
+import {
+  HiOutlineMap,
+  HiOutlinePlus,
+  HiOutlineSparkles,
+} from "react-icons/hi2";
+import Image from "next/image";
 
 export default function HomePage() {
   const router = useRouter();
@@ -42,40 +47,57 @@ export default function HomePage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="text-center">
-            <div className="flex justify-center mb-8">
+            <div className="flex justify-center mb-12">
               <div className="relative">
-                <HiOutlineMap className="h-20 w-20 text-blue-600" />
-                <HiOutlineSparkles className="h-8 w-8 text-yellow-500 absolute -top-2 -right-2" />
+                <Image
+                  src="/brand-lg.png"
+                  alt="breadcrumbs.ai"
+                  width={700}
+                  height={700}
+                  className="h-64 w-auto"
+                />
               </div>
             </div>
-            
-            <h1 className="text-4xl font-bold text-gray-900 sm:text-5xl md:text-6xl mb-6">
-              Smart Travel Planner
-            </h1>
-            
+
             <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-              Plan your travel itineraries with our intelligent, places-aware notebook 
-              and interactive map visualization. Create detailed itineraries, explore places, 
-              and visualize your journey on an interactive map.
+              Follow your path with breadcrumbs.ai - the intelligent travel
+              companion that helps you create detailed itineraries, discover
+              amazing places, and navigate your journey with interactive maps
+              and smart recommendations.
             </p>
 
             <div className="grid md:grid-cols-3 gap-8 mb-12 max-w-4xl mx-auto">
               <div className="text-center p-6 bg-white rounded-lg shadow-sm">
                 <HiOutlinePlus className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Create Itineraries</h3>
-                <p className="text-gray-600">Build detailed travel plans with AI assistance and smart place suggestions.</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Create Itineraries
+                </h3>
+                <p className="text-gray-600">
+                  Build detailed travel plans with AI assistance and smart place
+                  suggestions.
+                </p>
               </div>
-              
+
               <div className="text-center p-6 bg-white rounded-lg shadow-sm">
                 <HiOutlineMap className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Interactive Maps</h3>
-                <p className="text-gray-600">Visualize your journey with integrated Google Maps and place details.</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Interactive Maps
+                </h3>
+                <p className="text-gray-600">
+                  Visualize your journey with integrated Google Maps and place
+                  details.
+                </p>
               </div>
-              
+
               <div className="text-center p-6 bg-white rounded-lg shadow-sm">
                 <HiOutlineSparkles className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Smart Features</h3>
-                <p className="text-gray-600">Get intelligent suggestions, place photos, and detailed travel information.</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Smart Features
+                </h3>
+                <p className="text-gray-600">
+                  Get intelligent suggestions, place photos, and detailed travel
+                  information.
+                </p>
               </div>
             </div>
 
