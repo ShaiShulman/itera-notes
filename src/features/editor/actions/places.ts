@@ -37,17 +37,6 @@ export async function getPlaceDetailsAction(
   }
 }
 
-export async function getPlacePhotoUrl(
-  photoReference: string,
-  maxWidth: number = 400
-): Promise<string> {
-  try {
-    return googlePlacesService.getPhotoUrl(photoReference, maxWidth);
-  } catch (error) {
-    console.error("Get place photo URL error:", error);
-    return "";
-  }
-}
 
 export async function findPlaceByNameAction(placeName: string): Promise<{
   success: boolean;
@@ -85,20 +74,15 @@ export async function findPlaceByNameAction(placeName: string): Promise<{
     if (!placeDetails) {
       return { success: false, error: "Could not fetch place details" };
     }
-    // Get photo URLs instead of photo references
+    // Get photo references (not URLs) for client-side API calls
     const photoReferences = (placeDetails.photos || [])
       .slice(0, 4)
-      .map((photo) =>
-        googlePlacesService.getPhotoUrl(photo.photo_reference, 400)
-      );
+      .map((photo) => photo.photo_reference);
 
-    // Get thumbnail URL for first photo
+    // Get thumbnail reference for first photo
     const thumbnailUrl =
       placeDetails.photos && placeDetails.photos.length > 0
-        ? googlePlacesService.getPhotoUrl(
-            placeDetails.photos[0].photo_reference,
-            150
-          )
+        ? placeDetails.photos[0].photo_reference
         : undefined;
 
     return {
@@ -107,12 +91,8 @@ export async function findPlaceByNameAction(placeName: string): Promise<{
         placeId: placeDetails.place_id,
         name: placeDetails.name,
         address: placeDetails.formatted_address,
-        lat: typeof placeDetails.geometry.location.lat === 'function' 
-          ? placeDetails.geometry.location.lat() 
-          : placeDetails.geometry.location.lat,
-        lng: typeof placeDetails.geometry.location.lng === 'function' 
-          ? placeDetails.geometry.location.lng() 
-          : placeDetails.geometry.location.lng,
+        lat: placeDetails.geometry.location.lat,
+        lng: placeDetails.geometry.location.lng,
         rating: placeDetails.rating,
         photoReferences,
         description: placeDetails.editorial_summary?.overview,

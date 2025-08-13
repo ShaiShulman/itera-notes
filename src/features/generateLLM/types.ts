@@ -12,6 +12,9 @@ export interface PlaceLocation {
   thumbnailUrl?: string;
   status?: "loading" | "found" | "error" | "free-text" | "idle";
   type?: "place" | "hotel"; // Type of place - used to determine which block to create
+  // Driving directions data
+  drivingTimeFromPrevious?: number; // Duration in minutes from previous place
+  drivingDistanceFromPrevious?: number; // Distance in meters from previous place
 }
 
 export interface ItineraryDay {

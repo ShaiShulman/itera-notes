@@ -7,10 +7,12 @@ import {
   type ItineraryGenerationRequest,
   type GeneratedItinerary,
 } from "@/services/openai/itinerary";
+import type { DirectionsData } from "@/features/directions/types";
 
 export interface ItineraryGenerationResult {
   success: boolean;
   data?: GeneratedItinerary;
+  directions?: DirectionsData[];
   error?: string;
 }
 
@@ -53,12 +55,36 @@ export async function generateItineraryAction(
     // Generate the itinerary using OpenAI
     const generatedItinerary = await generateItinerary(request);
 
+    // Generate directions for the itinerary and update driving times
+    let directions: DirectionsData[] = [];
+    let updatedItinerary = generatedItinerary;
+    
+    try {
+      console.log("🚗 Generating directions for new itinerary...");
+      const { generateDirectionsWithTimes } = await import("@/features/directions/generator");
+      const result = await generateDirectionsWithTimes(generatedItinerary);
+      
+      directions = result.directions;
+      updatedItinerary = result.updatedItinerary;
+      
+      console.log(
+        `✅ Generated ${directions.length} direction routes and updated driving times for new itinerary`
+      );
+    } catch (error) {
+      console.error(
+        "⚠️ Failed to generate directions for itinerary (continuing anyway):",
+        error
+      );
+      // Don't fail the entire operation if directions fail
+    }
+
     // Revalidate the itineraries page to ensure fresh data
     revalidatePath("/itineraries");
 
     return {
       success: true,
-      data: generatedItinerary,
+      data: updatedItinerary,
+      directions,
     };
   } catch (error) {
     console.error("Error in generateItineraryAction:", error);

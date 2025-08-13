@@ -61,8 +61,8 @@ export function convertItineraryToEditorData(
           status: place.status || "found",
           // Default values for fields not in our enriched data
           notes: "",
-          drivingTimeFromPrevious: 0,
-          drivingDistanceFromPrevious: 0,
+          drivingTimeFromPrevious: place.drivingTimeFromPrevious || 0,
+          drivingDistanceFromPrevious: place.drivingDistanceFromPrevious || 0,
         })),
       },
     };
@@ -90,8 +90,7 @@ export function convertItineraryToEditorData(
           lng: place.lng,
           // Use enriched data from Google Places API if available
           placeId: place.placeId || "",
-          description:
-            place.description || `Location from itinerary: ${place.name}`,
+          description: place.description || ``,
           address: place.address || "",
           rating: place.rating || 0,
           photoReferences: place.photoReferences || [],
@@ -99,8 +98,8 @@ export function convertItineraryToEditorData(
           status: place.status || "found",
           // Default values for fields not in our enriched data
           notes: "",
-          drivingTimeFromPrevious: 0,
-          drivingDistanceFromPrevious: 0,
+          drivingTimeFromPrevious: place.drivingTimeFromPrevious || 0,
+          drivingDistanceFromPrevious: place.drivingDistanceFromPrevious || 0,
           // Additional metadata
           dayNumber: day.dayNumber,
           orderInDay: i,
@@ -137,6 +136,20 @@ export function convertItineraryToEditorData(
 export function convertEditorDataToItinerary(
   editorData: EditorData
 ): GeneratedItinerary {
+  // Handle undefined or missing blocks
+  if (!editorData || !editorData.blocks || !Array.isArray(editorData.blocks)) {
+    console.warn(
+      "convertEditorDataToItinerary: Invalid editorData provided",
+      editorData
+    );
+    return {
+      title: "My Itinerary",
+      destination: "",
+      totalDays: 0,
+      days: [],
+    };
+  }
+
   const blocks = editorData.blocks;
   const days: ItineraryDay[] = [];
   let title = "My Itinerary";
@@ -164,21 +177,34 @@ export function convertEditorDataToItinerary(
   const dayBlocks = blocks.filter((block) => block.type === "day");
 
   for (const dayBlock of dayBlocks) {
+    if (!dayBlock || !dayBlock.data) {
+      console.warn(
+        "convertEditorDataToItinerary: Invalid day block found",
+        dayBlock
+      );
+      continue;
+    }
+
     const dayData = dayBlock.data as any;
 
-    // Extract places from the day block's places array
-    const places: PlaceLocation[] = dayData.places.map((place: any) => ({
-      name: place.name,
-      lat: place.lat,
-      lng: place.lng,
-      paragraph: place.paragraph, // Include the itinerary description text
-    }));
+    // Extract places from the day block's places array (handle undefined places)
+    const places: PlaceLocation[] = [];
+    if (dayData.places && Array.isArray(dayData.places)) {
+      places.push(
+        ...dayData.places.map((place: any) => ({
+          name: place?.name || "Unnamed Place",
+          lat: place?.lat || 0,
+          lng: place?.lng || 0,
+          paragraph: place?.paragraph || "", // Include the itinerary description text
+        }))
+      );
+    } //TODO: check if paragraph still required
 
     const day: ItineraryDay = {
-      dayNumber: dayData.dayNumber,
-      date: dayData.date,
-      title: dayData.title,
-      description: dayData.description,
+      dayNumber: dayData.dayNumber || 1,
+      date: dayData.date || "",
+      title: dayData.title || "",
+      description: dayData.description || "",
       places,
     };
 

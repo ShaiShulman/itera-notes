@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useItinerary } from "@/contexts/ItineraryContext";
+import { AuthProtected } from "@/features/auth/components/AuthProtected";
 import {
   CreateItineraryProvider,
   useCreateItineraryForm,
@@ -30,7 +31,7 @@ interface FormErrors {
 
 function NewItineraryForm() {
   const router = useRouter();
-  const { setItinerary, setEditorData } = useItinerary();
+  const { state, setEditorData, setDirectionsData, setFormMetadata } = useItinerary();
   const { formData, updateFormData, isFormDirty } = useCreateItineraryForm();
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
@@ -102,6 +103,7 @@ function NewItineraryForm() {
     }
 
     try {
+      // Immediately set loading to prevent form flash
       setIsLoading(true);
       setLoadingMessage("Creating your personalized itinerary...");
 
@@ -114,43 +116,93 @@ function NewItineraryForm() {
       if (actionResult.success && actionResult.data) {
         console.log("Generated itinerary:", actionResult.data);
 
-        // Store itinerary in context
-        setItinerary(actionResult.data);
+        if (actionResult.directions && actionResult.directions.length > 0) {
+          setLoadingMessage("Calculating driving routes...");
+        }
 
-        // Convert to editor data format and store
+        // Convert to editor data format
         const editorData = convertItineraryToEditorData(actionResult.data);
+
+        // Store form metadata in context
+        setFormMetadata({
+          destination: result.data.destination,
+          startDate: new Date(result.data.startDate),
+          endDate: new Date(result.data.endDate),
+          interests: result.data.interests,
+          travelStyle: result.data.travelStyle,
+          additionalNotes: result.data.additionalNotes || undefined,
+        });
+
         setEditorData(editorData);
 
-        // Keep form data in localStorage for when user navigates back
-        // Don't clear form data after successful generation
+        if (actionResult.directions) {
+          setDirectionsData(actionResult.directions);
+          console.log(
+            `✅ Stored ${actionResult.directions.length} direction routes in context`
+          );
+        }
 
-        // Redirect to editor page
-        router.push("/editor");
+        setLoadingMessage("Saving to database and preparing editor...");
+
+        // Wait for auto-save to complete and get the itinerary ID
+        let attempts = 0;
+        const maxAttempts = 20; // 10 seconds max wait
+        
+        while (attempts < maxAttempts && !state.currentItineraryId) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          attempts++;
+        }
+
+        if (state.currentItineraryId) {
+          // Import the slug generation utility
+          const { generateItinerarySlug } = await import("@/utils/itinerary");
+          
+          // Generate slug from the itinerary data
+          const title = actionResult.data.title || "New Itinerary";
+          const slug = generateItinerarySlug(title, state.currentItineraryId, editorData);
+          
+          console.log("✅ Generated slug for new itinerary:", slug);
+          
+          // Set flag to indicate this is a fresh itinerary from create page
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('fresh-from-create', 'true');
+            sessionStorage.setItem('fresh-from-create-timestamp', Date.now().toString());
+            sessionStorage.setItem('fresh-itinerary-id', state.currentItineraryId);
+          }
+          
+          // Redirect to the slug-based editor URL
+          router.push(`/editor/${slug}`);
+          // Don't reset loading state - let the redirect happen
+          return;
+        } else {
+          console.warn("⚠️ No itinerary ID available after auto-save, falling back to basic editor");
+          
+          // Fallback: Set flag and go to basic editor
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('fresh-from-create', 'true');
+            sessionStorage.setItem('fresh-from-create-timestamp', Date.now().toString());
+          }
+          
+          router.push("/editor");
+          // Don't reset loading state - let the redirect happen
+          return;
+        }
       } else {
         setErrors({
           submit: actionResult.error || "Failed to generate itinerary",
         });
+        setIsLoading(false);
+        setLoadingMessage("");
       }
     } catch (error) {
       console.error("Error generating itinerary:", error);
       setErrors({ submit: "Failed to generate itinerary. Please try again." });
-    } finally {
       setIsLoading(false);
       setLoadingMessage("");
     }
   };
 
-  // Handle save as draft
-  const handleSaveDraft = () => {
-    // TODO: Implement actual draft saving logic
-    console.log("Draft saved:", formData);
-    // For now, just show a success message without clearing
-    alert("Draft saved! Your form data will remain for future editing.");
-  };
-
-  // Remove clear form handler
-
-  // Get today's date for date input min values (memoized to prevent hydration issues)
+  // Get today's date for date input min values
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
 
   if (isLoading) {
@@ -442,14 +494,6 @@ function NewItineraryForm() {
                 <SparklesIcon className="h-5 w-5" />
                 Generate My Itinerary
               </button>
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                className="flex-1 border border-slate-300 text-slate-700 px-6 py-3 rounded-lg font-medium hover:bg-slate-50 transition-colors focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 flex items-center justify-center gap-2"
-              >
-                <CheckIcon className="h-5 w-5" />
-                Save as Draft
-              </button>
             </div>
           </form>
         </div>
@@ -467,8 +511,10 @@ function NewItineraryForm() {
 
 export default function NewItinerary() {
   return (
-    <CreateItineraryProvider>
-      <NewItineraryForm />
-    </CreateItineraryProvider>
+    <AuthProtected>
+      <CreateItineraryProvider>
+        <NewItineraryForm />
+      </CreateItineraryProvider>
+    </AuthProtected>
   );
 }

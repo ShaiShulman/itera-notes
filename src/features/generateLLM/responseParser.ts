@@ -23,25 +23,31 @@ export function parseItineraryResponse(
 
   const days: ItineraryDay[] = [];
   let currentDay: ItineraryDay | null = null;
-  let currentDayDescription = "";
-  let currentPlaceText = "";
-  let isCapturingPlaceText = false;
+  let currentPlace: PlaceLocation | null = null;
+  let pendingDescription = "";
+  let collectingDayDescription = false;
+
+  console.log("🔍 Starting to parse itinerary response");
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    console.log(`📝 Line ${i}: ${line}`);
 
     // Check for day header: DAY X - Date - Title
     const dayMatch = line.match(/^DAY\s+(\d+)\s*-\s*(.+)/i);
     if (dayMatch) {
+      console.log(`📅 Found day header: ${line}`);
+      
+      // Save pending description to current place if exists
+      if (currentPlace && pendingDescription.trim()) {
+        currentPlace.paragraph = pendingDescription.trim();
+        console.log(`💾 Saved description to place "${currentPlace.name}": ${pendingDescription.trim()}`);
+      }
+
       // Save previous day if exists
       if (currentDay) {
-        // Save any pending place text
-        if (isCapturingPlaceText && currentDay.places.length > 0) {
-          currentDay.places[currentDay.places.length - 1].paragraph =
-            currentPlaceText.trim();
-        }
-        currentDay.description = currentDayDescription.trim();
         days.push(currentDay);
+        console.log(`📤 Saved day ${currentDay.dayNumber} with ${currentDay.places.length} places`);
       }
 
       // Parse day info
@@ -66,9 +72,11 @@ export function parseItineraryResponse(
         description: "",
         places: [],
       };
-      currentDayDescription = "";
-      currentPlaceText = "";
-      isCapturingPlaceText = false;
+      
+      currentPlace = null;
+      pendingDescription = "";
+      collectingDayDescription = true; // Start collecting day description after day header
+      console.log(`🆕 Created new day: ${currentDay.title}`);
       continue;
     }
 
@@ -77,10 +85,12 @@ export function parseItineraryResponse(
       /\*\*(.+?)\*\*\s*\(lat:\s*([-\d.]+),\s*lng:\s*([-\d.]+)\)/i
     );
     if (placeMatch && currentDay) {
-      // Save text for the previous place if we were capturing
-      if (isCapturingPlaceText && currentDay.places.length > 0) {
-        currentDay.places[currentDay.places.length - 1].paragraph =
-          currentPlaceText.trim();
+      console.log(`📍 Found place: ${placeMatch[1]}`);
+      
+      // Save pending description to current place if exists
+      if (currentPlace && pendingDescription.trim()) {
+        currentPlace.paragraph = pendingDescription.trim();
+        console.log(`💾 Saved description to place "${currentPlace.name}": ${pendingDescription.trim()}`);
       }
 
       const placeName = placeMatch[1].replace("**", "").trim();
@@ -88,51 +98,59 @@ export function parseItineraryResponse(
       const lng = parseFloat(placeMatch[3]);
 
       if (!isNaN(lat) && !isNaN(lng)) {
-        currentDay.places.push({
+        currentPlace = {
           name: placeName,
           lat,
           lng,
-        });
-        // Start capturing text for this place
-        currentPlaceText = "";
-        isCapturingPlaceText = true;
+          paragraph: "", // Initialize as empty
+        };
+        currentDay.places.push(currentPlace);
+        pendingDescription = "";
+        collectingDayDescription = false; // Stop collecting day description once we hit places
+        console.log(`➕ Added place to day: ${placeName}`);
       }
       continue;
     }
 
-    // If we're capturing place text, add this line to the current place
-    if (isCapturingPlaceText && currentDay) {
-      // Skip lines that are titles, day headers, or other structural elements
-      if (
-        !line.toUpperCase().includes("DAY") &&
-        !line.toUpperCase().includes("ITINERARY TITLE:") &&
-        !line.includes("**")
-      ) {
-        currentPlaceText += line + " ";
-      }
-      continue;
-    }
-
-    // Add to day description if we're in a day context and it's not a place
+    // Skip empty lines and structural elements
     if (
-      currentDay &&
-      !line.includes("**") &&
-      !line.toUpperCase().includes("DAY") &&
-      !isCapturingPlaceText
+      line.toUpperCase().includes("ITINERARY TITLE:") ||
+      line.startsWith("**") ||
+      line.length === 0
     ) {
-      currentDayDescription += line + " ";
+      continue;
+    }
+
+    // Collect day description (only if we haven't hit any places yet)
+    if (collectingDayDescription && currentDay) {
+      if (currentDay.description.length > 0) {
+        currentDay.description += " ";
+      }
+      currentDay.description += line;
+      console.log(`📄 Added to day description: ${line}`);
+      continue;
+    }
+
+    // Collect place description (if we have a current place)
+    if (currentPlace) {
+      if (pendingDescription.length > 0) {
+        pendingDescription += " ";
+      }
+      pendingDescription += line;
+      console.log(`📝 Added to pending place description: ${line}`);
+      continue;
     }
   }
 
-  // Don't forget the last day and last place
+  // Don't forget to save the last place's description and last day
+  if (currentPlace && pendingDescription.trim()) {
+    currentPlace.paragraph = pendingDescription.trim();
+    console.log(`💾 Saved final description to place "${currentPlace.name}": ${pendingDescription.trim()}`);
+  }
+  
   if (currentDay) {
-    // Save any pending place text
-    if (isCapturingPlaceText && currentDay.places.length > 0) {
-      currentDay.places[currentDay.places.length - 1].paragraph =
-        currentPlaceText.trim();
-    }
-    currentDay.description = currentDayDescription.trim();
     days.push(currentDay);
+    console.log(`📤 Saved final day ${currentDay.dayNumber} with ${currentDay.places.length} places`);
   }
 
   // Fill in missing days if needed
@@ -147,6 +165,8 @@ export function parseItineraryResponse(
     });
   }
 
+  console.log(`✅ Parsing complete. Found ${days.length} days total.`);
+  
   return {
     title,
     destination,

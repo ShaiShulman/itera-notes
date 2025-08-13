@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import MainLayout from "@/components/layout/MainLayout";
 import { ItineraryProvider } from "@/contexts/ItineraryContext";
+import { SessionProvider } from "next-auth/react";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -41,9 +43,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ItineraryProvider>
-          <MainLayout>{children}</MainLayout>
-        </ItineraryProvider>
+        <SessionProvider>
+          <AuthProvider>
+            <ItineraryProvider>
+              <MainLayout>{children}</MainLayout>
+            </ItineraryProvider>
+          </AuthProvider>
+        </SessionProvider>
       </body>
     </html>
   );
