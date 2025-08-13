@@ -35,6 +35,7 @@ interface EditorBlocks {
     config?: Record<string, unknown>,
     index?: number
   ) => void;
+  delete: (index?: number) => void;
   getBlocksCount: () => number;
   getBlockByIndex: (index: number) => EditorBlock;
 }
@@ -661,6 +662,48 @@ export default function ItineraryEditor({
               }
             };
 
+            // Add event listener for block deletion requests
+            const handleDeleteBlockRequest = (event: CustomEvent) => {
+              const { blockElement, blockType, blockName } = event.detail;
+              console.log(
+                `ItineraryEditor: Request to delete ${blockType} block: ${blockName}`
+              );
+
+              if (editorRef.current?.blocks && blockElement) {
+                // Find the block index by comparing DOM elements
+                const allBlocks = holderRef.current?.querySelectorAll('.ce-block');
+                if (allBlocks) {
+                  let blockIndex = -1;
+                  for (let i = 0; i < allBlocks.length; i++) {
+                    if (allBlocks[i] === blockElement) {
+                      blockIndex = i;
+                      break;
+                    }
+                  }
+
+                  if (blockIndex >= 0) {
+                    console.log(
+                      `ItineraryEditor: Deleting block at index ${blockIndex} (${blockType}: ${blockName})`
+                    );
+                    
+                    // Use Editor.js blocks.delete() API to properly remove the block
+                    editorRef.current.blocks.delete(blockIndex);
+                    
+                    // Trigger place numbering update after deletion
+                    setTimeout(() => {
+                      triggerPlaceNumberingUpdate();
+                    }, 50);
+                    
+                    console.log(`ItineraryEditor: Successfully deleted ${blockType} block`);
+                  } else {
+                    console.warn(
+                      `ItineraryEditor: Could not find block index for deletion: ${blockType}`
+                    );
+                  }
+                }
+              }
+            };
+
             if (holderRef.current) {
               holderRef.current.addEventListener(
                 "dayblock:addBlock",
@@ -669,6 +712,10 @@ export default function ItineraryEditor({
               holderRef.current.addEventListener(
                 "place:selectionChanged",
                 handlePlaceSelectionEvent as EventListener
+              );
+              holderRef.current.addEventListener(
+                "block:requestDelete",
+                handleDeleteBlockRequest as EventListener
               );
             }
           },

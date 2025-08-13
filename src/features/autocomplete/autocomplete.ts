@@ -5,7 +5,7 @@ import {
   AutocompleteLocationBias,
   PLACE_TYPE_CONFIGS,
 } from "./types";
-import { getIconForPlaceType, getPlaceTypeName } from "./icons";
+import { getIconForPlaceType } from "./icons";
 import { getPlaceDetailsAction } from "@/features/editor/actions/places";
 
 export function attachAutocomplete(
@@ -131,11 +131,11 @@ export function attachAutocomplete(
 
       // Main text (place name)
       const mainText = document.createElement("div");
-      
+
       // Check if this is a hotel type and apply purple color
-      const isHotel = prediction.types.includes('lodging');
-      const textColor = isHotel ? '#8b5cf6' : '#065f46';
-      
+      const isHotel = prediction.types.includes("lodging");
+      const textColor = isHotel ? "#8b5cf6" : "#065f46";
+
       mainText.style.cssText = `
         font-weight: 600;
         color: ${textColor};

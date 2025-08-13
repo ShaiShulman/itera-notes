@@ -16,7 +16,6 @@ import { createImageSkeleton } from "@/components/ui/skeleton";
 import { IconLoader, IconPaths } from "@/assets/icons/iconLoader";
 import { BUTTON_DIMENSIONS, ICON_DIMENSIONS, BUTTON_STYLES } from "./constants";
 
-
 // Debounce mechanism for place numbering updates
 let numberingUpdateTimeout: NodeJS.Timeout | null = null;
 
@@ -429,6 +428,31 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         this.isExpanded = false;
         this.renderCollapsed();
         console.log(`📍 ${this.blockType}: Force collapsed ${this.data.name}`);
+      }
+    });
+
+    // Add event listener for uncheck day finish
+    this.wrapper.addEventListener("place:uncheckDayFinish", (e) => {
+      e.stopPropagation();
+      const customEvent = e as CustomEvent;
+      const { excludeUid } = customEvent.detail;
+
+      // Only uncheck if this is not the place that triggered the uncheck
+      if (this.data.uid !== excludeUid && this.data.isDayFinish) {
+        this.data.isDayFinish = false;
+
+        // Re-render the collapsed view to show the updated button state
+        if (!this.isExpanded) {
+          this.renderCollapsed(false);
+        }
+
+        // Trigger editor change event
+        const changeEvent = new Event("input", { bubbles: true });
+        this.wrapper?.dispatchEvent(changeEvent);
+
+        console.log(
+          `🏁 ${this.blockType}: Unchecked day finish for ${this.data.name} due to another place being marked as finish`
+        );
       }
     });
 
@@ -1888,7 +1912,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     try {
       const svgContent = await IconLoader.loadIcon(iconPath);
       iconContainer.innerHTML = svgContent;
-      
+
       // Apply proper styling to the SVG
       const svg = iconContainer.querySelector("svg");
       if (svg) {
@@ -1904,10 +1928,10 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
 
     button.appendChild(iconContainer);
     button.title = tooltip;
-    
+
     // Add data attribute for identification if buttonId is provided
     if (buttonId) {
-      button.setAttribute('data-button-id', buttonId);
+      button.setAttribute("data-button-id", buttonId);
     }
 
     // Event listeners
@@ -1946,66 +1970,95 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
   }
 
   // Create action buttons in the correct order to avoid inconsistency
-  protected async createActionButtonsInOrder(buttonsContainer: HTMLElement): Promise<void> {
-    const buttonConfigs = [];
+  protected async createActionButtonsInOrder(
+    buttonsContainer: HTMLElement
+  ): Promise<void> {
+    // Build button configurations using array construction
+    const buttonConfigs = [
+      // Conditionally include suggest similar place button (only for places, not hotels)
+      ...(this.autocompleteType === "place"
+        ? [
+            {
+              iconPath: IconPaths.LIGHTBULB,
+              tooltip: "Suggest similar place",
+              onClick: () => this.handleSuggestSimilar(),
+              isActive: false,
+              buttonId: "suggest-similar",
+            },
+          ]
+        : []),
 
-    // Suggest similar place button (only for places, not hotels)
-    if (this.autocompleteType === "place") {
-      buttonConfigs.push({
-        iconPath: IconPaths.LIGHTBULB,
-        tooltip: "Suggest similar place",
-        onClick: () => this.handleSuggestSimilar(),
+      // Hide in map toggle button
+      {
+        iconPath: IconPaths.BAN,
+        tooltip: this.data.hideInMap ? "Show in map" : "Hide in map",
+        onClick: () => this.handleToggleHideInMap(),
+        isActive: this.data.hideInMap || false,
+        buttonId: "hide-in-map",
+      },
+
+      // Define as day finish toggle button
+      {
+        iconPath: IconPaths.FLAG,
+        tooltip: this.data.isDayFinish
+          ? "Remove day finish"
+          : "Define as day finish",
+        onClick: () => this.handleToggleDayFinish(),
+        isActive: this.data.isDayFinish || false,
+        buttonId: "day-finish",
+      },
+
+      // Delete button
+      {
+        iconPath: IconPaths.TRASH_BIN,
+        tooltip: `Delete this ${this.blockType.toLowerCase()}`,
+        onClick: () => this.handleDeleteBlock(),
         isActive: false,
-        buttonId: 'suggest-similar'
-      });
-    }
+        buttonId: "delete",
+      },
+    ];
 
-    // Hide in map toggle button
-    buttonConfigs.push({
-      iconPath: IconPaths.BAN,
-      tooltip: this.data.hideInMap ? "Show in map" : "Hide in map",
-      onClick: () => this.handleToggleHideInMap(),
-      isActive: this.data.hideInMap || false,
-      buttonId: 'hide-in-map'
-    });
+    // Create all buttons and append them using Promise.all for better performance
+    const buttons = await Promise.all(
+      buttonConfigs.map((config) =>
+        this.createActionButton(
+          config.iconPath,
+          config.tooltip,
+          config.onClick,
+          config.isActive,
+          config.buttonId
+        )
+      )
+    );
 
-    // Define as day finish toggle button
-    buttonConfigs.push({
-      iconPath: IconPaths.FLAG,
-      tooltip: this.data.isDayFinish ? "Remove day finish" : "Define as day finish",
-      onClick: () => this.handleToggleDayFinish(),
-      isActive: this.data.isDayFinish || false,
-      buttonId: 'day-finish'
-    });
-
-    // Delete button
-    buttonConfigs.push({
-      iconPath: IconPaths.TRASH_BIN,
-      tooltip: `Delete this ${this.blockType.toLowerCase()}`,
-      onClick: () => this.handleDeleteBlock(),
-      isActive: false,
-      buttonId: 'delete'
-    });
-
-    // Create buttons in sequence to maintain order
-    for (const config of buttonConfigs) {
-      const button = await this.createActionButton(
-        config.iconPath,
-        config.tooltip,
-        config.onClick,
-        config.isActive,
-        config.buttonId
-      );
-      buttonsContainer.appendChild(button);
-    }
+    // Append all buttons to the container
+    buttons.forEach((button) => buttonsContainer.appendChild(button));
   }
 
   // Update a specific action button's state without re-rendering the entire component
   protected updateActionButtonState(buttonId: string, isActive: boolean): void {
-    if (!this.wrapper) return;
+    if (!this.wrapper) {
+      console.warn(
+        `${this.blockType}: No wrapper found when updating button ${buttonId}`
+      );
+      return;
+    }
 
-    const button = this.wrapper.querySelector(`[data-button-id="${buttonId}"]`) as HTMLElement;
-    if (!button) return;
+    const button = this.wrapper.querySelector(
+      `[data-button-id="${buttonId}"]`
+    ) as HTMLElement;
+    if (!button) {
+      console.warn(
+        `${this.blockType}: Button ${buttonId} not found when updating state`
+      );
+      return;
+    }
+
+    console.log(
+      `${this.blockType}: Updating button ${buttonId} to ${
+        isActive ? "active" : "inactive"
+      } for ${this.data.name}`
+    );
 
     // Update button appearance
     button.style.background = isActive ? this.primaryColor : "transparent";
@@ -2013,42 +2066,206 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     button.style.borderColor = isActive ? this.primaryColor : "#e5e7eb";
 
     // Update tooltip based on button type and state
-    if (buttonId === 'day-finish') {
+    if (buttonId === "day-finish") {
       button.title = isActive ? "Remove day finish" : "Define as day finish";
-    } else if (buttonId === 'hide-in-map') {
+    } else if (buttonId === "hide-in-map") {
       button.title = isActive ? "Show in map" : "Hide in map";
     }
   }
 
   // Action button handlers
   protected handleDeleteBlock() {
-    if (confirm(`Delete this ${this.blockType.toLowerCase()}?`)) {
-      // Find the parent Editor.js block and remove it
-      const editorBlock = this.wrapper?.closest(".ce-block");
-      if (editorBlock) {
-        // Trigger Editor.js deletion
-        const deleteEvent = new KeyboardEvent("keydown", {
-          key: "Delete",
-          bubbles: true,
-          cancelable: true,
-        });
-        editorBlock.dispatchEvent(deleteEvent);
+    // Show in-line delete alert instead of browser confirm
+    this.showDeleteAlert();
+  }
 
-        // Also trigger place numbering update
-        triggerPlaceNumberingUpdate();
+  protected showDeleteAlert() {
+    if (!this.wrapper) return;
 
-        console.log(
-          `🗑️ ${this.blockType}: Deleted block for ${this.data.name}`
-        );
-      }
+    // Remove any existing alert
+    this.hideDeleteAlert();
+
+    // Create alert container
+    const alertContainer = document.createElement("div");
+    alertContainer.className = "delete-alert";
+    alertContainer.style.cssText = `
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      animation: slideDown 0.2s ease-out;
+    `;
+
+    // Add CSS animation if not already present
+    if (!document.getElementById("delete-alert-styles")) {
+      const style = document.createElement("style");
+      style.id = "delete-alert-styles";
+      style.textContent = `
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    // Alert content
+    const alertContent = document.createElement("div");
+    alertContent.style.cssText =
+      "display: flex; align-items: center; gap: 8px;";
+
+    // Warning icon
+    const warningIcon = document.createElement("div");
+    warningIcon.style.cssText = "color: #dc2626; flex-shrink: 0;";
+    warningIcon.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+
+    // Alert text
+    const alertText = document.createElement("span");
+    alertText.style.cssText =
+      "color: #991b1b; font-size: 14px; font-weight: 500;";
+    alertText.textContent = `Delete this ${this.blockType.toLowerCase()}?`;
+
+    alertContent.appendChild(warningIcon);
+    alertContent.appendChild(alertText);
+
+    // Buttons container
+    const buttonsContainer = document.createElement("div");
+    buttonsContainer.style.cssText =
+      "display: flex; gap: 8px; align-items: center;";
+
+    // Confirm delete button
+    const confirmButton = document.createElement("button");
+    confirmButton.style.cssText = `
+      background: #dc2626;
+      color: white;
+      border: none;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    `;
+    confirmButton.textContent = "Delete";
+
+    // Cancel button
+    const cancelButton = document.createElement("button");
+    cancelButton.style.cssText = `
+      background: transparent;
+      color: #6b7280;
+      border: 1px solid #d1d5db;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    `;
+    cancelButton.textContent = "Cancel";
+
+    // Event listeners
+    confirmButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.confirmDeleteBlock();
+    });
+
+    confirmButton.addEventListener("mouseenter", () => {
+      confirmButton.style.background = "#b91c1c";
+      confirmButton.style.transform = "scale(1.05)";
+    });
+
+    confirmButton.addEventListener("mouseleave", () => {
+      confirmButton.style.background = "#dc2626";
+      confirmButton.style.transform = "scale(1)";
+    });
+
+    cancelButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.hideDeleteAlert();
+    });
+
+    cancelButton.addEventListener("mouseenter", () => {
+      cancelButton.style.background = "#f9fafb";
+      cancelButton.style.borderColor = "#9ca3af";
+      cancelButton.style.transform = "scale(1.05)";
+    });
+
+    cancelButton.addEventListener("mouseleave", () => {
+      cancelButton.style.background = "transparent";
+      cancelButton.style.borderColor = "#d1d5db";
+      cancelButton.style.transform = "scale(1)";
+    });
+
+    buttonsContainer.appendChild(confirmButton);
+    buttonsContainer.appendChild(cancelButton);
+
+    alertContainer.appendChild(alertContent);
+    alertContainer.appendChild(buttonsContainer);
+
+    // Add to wrapper
+    this.wrapper.appendChild(alertContainer);
+
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      this.hideDeleteAlert();
+    }, 5000);
+  }
+
+  protected hideDeleteAlert() {
+    if (!this.wrapper) return;
+    const existingAlert = this.wrapper.querySelector(".delete-alert");
+    if (existingAlert) {
+      existingAlert.remove();
+    }
+  }
+
+  protected confirmDeleteBlock() {
+    this.hideDeleteAlert();
+
+    // Find the parent Editor.js block and get its index for proper deletion
+    const editorBlock = this.wrapper?.closest(".ce-block");
+    if (editorBlock) {
+      // Dispatch a custom deletion event that the ItineraryEditor can handle
+      // This will use the Editor.js blocks.delete(index) API properly
+      const deleteEvent = new CustomEvent("block:requestDelete", {
+        bubbles: true,
+        detail: {
+          blockElement: editorBlock,
+          blockType: this.blockType,
+          blockName: this.data.name,
+        },
+      });
+
+      // Let the event bubble up to ItineraryEditor which has access to the editor instance
+      editorBlock.dispatchEvent(deleteEvent);
+
+      console.log(
+        `🗑️ ${this.blockType}: Requested deletion for block ${this.data.name}`
+      );
     }
   }
 
   protected handleToggleDayFinish() {
+    const wasFinish = this.data.isDayFinish;
     this.data.isDayFinish = !this.data.isDayFinish;
 
-    // Update just the specific button instead of re-rendering everything
-    this.updateActionButtonState('day-finish', this.data.isDayFinish || false);
+    // If this place is now marked as finish, uncheck all other places
+    if (this.data.isDayFinish && !wasFinish) {
+      this.uncheckAllOtherDayFinishPlaces();
+    }
+
+    // Re-render the collapsed view to show the updated button state
+    if (!this.isExpanded) {
+      this.renderCollapsed(false);
+    }
 
     // Trigger editor change event
     if (this.wrapper) {
@@ -2061,11 +2278,40 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     );
   }
 
+  protected uncheckAllOtherDayFinishPlaces() {
+    // Find all place and hotel blocks in the editor
+    const editorElement = this.wrapper?.closest(".codex-editor");
+    if (!editorElement) return;
+
+    const allPlaceBlocks = editorElement.querySelectorAll(
+      ".place-block, .hotel-block"
+    );
+
+    allPlaceBlocks.forEach((block) => {
+      // Skip this current block
+      if (block === this.wrapper) return;
+
+      // Dispatch a custom event to tell other blocks to uncheck their day finish
+      // This will directly update their data, causing them to re-render with correct state
+      const uncheckEvent = new CustomEvent("place:uncheckDayFinish", {
+        detail: { excludeUid: this.data.uid },
+        bubbles: true,
+      });
+      block.dispatchEvent(uncheckEvent);
+    });
+
+    console.log(
+      `🏁 ${this.blockType}: Unchecked day finish for all other places when setting ${this.data.name} as finish`
+    );
+  }
+
   protected handleToggleHideInMap() {
     this.data.hideInMap = !this.data.hideInMap;
 
-    // Update just the specific button instead of re-rendering everything
-    this.updateActionButtonState('hide-in-map', this.data.hideInMap || false);
+    // Re-render the collapsed view to show the updated button state
+    if (!this.isExpanded) {
+      this.renderCollapsed(false);
+    }
 
     // Trigger editor change event
     if (this.wrapper) {

@@ -50,6 +50,8 @@ export default class HotelBlock extends BasePlaceBlock<HotelBlockData> {
       status: data?.status || "idle",
       drivingTimeFromPrevious: data?.drivingTimeFromPrevious || 0,
       drivingDistanceFromPrevious: data?.drivingDistanceFromPrevious || 0,
+      isDayFinish: data?.isDayFinish || false,
+      hideInMap: data?.hideInMap || false,
       __type: "hotel",
     };
   }
