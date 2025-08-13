@@ -1459,8 +1459,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       imagesSection.appendChild(imagesGrid);
     }
 
-    // Description section - Google Places API description (only for found places)
-    if (this.data.placeId && this.data.description) {
+    if (
+      this.data.placeId &&
+      this.data.description &&
+      this.data.description !== ""
+    ) {
       const descriptionContainer = document.createElement("div");
       descriptionContainer.style.cssText = `
         background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
@@ -1469,25 +1472,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         padding: 16px;
         margin-bottom: 16px;
         box-shadow: 0 2px 8px rgba(14, 165, 233, 0.1);
-      `;
-
-      const descriptionLabel = document.createElement("h4");
-      descriptionLabel.style.cssText = `
-        color: #0c4a6e;
-        font-size: 15px;
-        font-weight: 700;
-        margin: 0 0 10px 0;
-        display: flex;
-        align-items: center;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      `;
-      descriptionLabel.innerHTML = `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 8px;">
-          <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4M9 11V9a3 3 0 1 1 6 0v2M9 11h6" stroke="currentColor" stroke-width="2"/>
-          <circle cx="12" cy="16" r="1" fill="currentColor"/>
-        </svg>
-        Google Places Description
       `;
 
       const description = document.createElement("p");
@@ -1501,21 +1485,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       `;
       description.textContent = `"${this.data.description}"`;
 
-      const sourceNote = document.createElement("div");
-      sourceNote.style.cssText = `
-        margin-top: 8px;
-        padding-top: 8px;
-        border-top: 1px solid #bae6fd;
-        font-size: 11px;
-        color: #0369a1;
-        text-align: right;
-        font-weight: 500;
-      `;
-      sourceNote.textContent = "Source: Google Places API";
-
-      descriptionContainer.appendChild(descriptionLabel);
       descriptionContainer.appendChild(description);
-      descriptionContainer.appendChild(sourceNote);
       imagesSection.appendChild(descriptionContainer);
     }
 

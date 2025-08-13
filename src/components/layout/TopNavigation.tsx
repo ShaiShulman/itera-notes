@@ -1,45 +1,38 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSession, signOut, signIn } from "next-auth/react";
-import {
-  HiOutlineMap,
-  HiOutlineClipboardDocumentList,
-  HiOutlineCog6Tooth,
-  HiOutlineQuestionMarkCircle,
-  HiOutlinePlus,
-  HiOutlineUser,
-  HiOutlineArrowRightOnRectangle,
-} from "react-icons/hi2";
+import { CustomIcon } from "@/components/icons/CustomIcon";
 
 const navigationItems = [
   {
     name: "Create Itinerary",
     href: "/create-itinerary",
-    icon: HiOutlinePlus,
+    icon: "plus" as const,
     primary: true,
   },
   {
     name: "Itinerary Editor",
     href: "/editor",
-    icon: HiOutlineMap,
+    icon: "map" as const,
   },
   {
     name: "My Itineraries",
     href: "/itineraries",
-    icon: HiOutlineClipboardDocumentList,
+    icon: "clipboard" as const,
   },
   {
     name: "Settings",
     href: "/settings",
-    icon: HiOutlineCog6Tooth,
+    icon: "settings" as const,
   },
-  {
-    name: "Help",
-    href: "/help",
-    icon: HiOutlineQuestionMarkCircle,
-  },
+  // {
+  //   name: "Help",
+  //   href: "/help",
+  //   icon: "help" as const,
+  // },
 ];
 
 export default function TopNavigation() {
@@ -52,27 +45,33 @@ export default function TopNavigation() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <h1 className="text-xl font-bold text-white">
-                Smart Travel Planner
+            <div className="flex-shrink-0 flex items-center space-x-4 mr-8">
+              <Image
+                src="/brand-sm.png"
+                alt="breadcrumbs.ai"
+                width={50}
+                height={50}
+                className="h-13 w-13"
+              />
+              <h1 className="text-3xl font-bold text-white tracking-tight">
+                breadcrumbs.ai
               </h1>
             </div>
           </div>
 
           {/* Navigation Items */}
-          <div className="hidden md:block flex-1 flex justify-center">
+          <div className="md:block flex-1 flex justify-center">
             <div className="flex items-baseline space-x-2">
               {session &&
                 navigationItems.map((item) => {
                   const isActive = pathname === item.href;
-                  const Icon = item.icon;
 
                   return (
                     <Link
                       key={item.name}
                       href={item.href}
                       className={`
-                      px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2
+                      px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-1
                       ${
                         item.primary
                           ? "bg-blue-600 text-white hover:bg-blue-700 shadow-md"
@@ -82,7 +81,7 @@ export default function TopNavigation() {
                       }
                     `}
                     >
-                      <Icon className="h-4 w-4" />
+                      <CustomIcon name={item.icon} className="h-5 w-5" />
                       <span>{item.name}</span>
                     </Link>
                   );
@@ -96,7 +95,10 @@ export default function TopNavigation() {
               {session ? (
                 <>
                   <div className="flex items-center space-x-2">
-                    <HiOutlineUser className="h-6 w-6 text-slate-300" />
+                    <CustomIcon
+                      name="user"
+                      className="h-5 w-5 text-slate-300"
+                    />
                     <span className="text-sm text-slate-300">
                       {session.user?.name || session.user?.email}
                     </span>
@@ -105,7 +107,7 @@ export default function TopNavigation() {
                     onClick={() => signOut()}
                     className="flex items-center space-x-1 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
                   >
-                    <HiOutlineArrowRightOnRectangle className="h-4 w-4" />
+                    <CustomIcon name="logout" className="h-6 w-6" />
                     <span>Sign out</span>
                   </button>
                 </>
@@ -114,7 +116,7 @@ export default function TopNavigation() {
                   onClick={() => signIn("google")}
                   className="flex items-center space-x-1 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
                 >
-                  <HiOutlineUser className="h-4 w-4" />
+                  <CustomIcon name="user" className="h-4 w-4" />
                   <span>Sign in</span>
                 </button>
               )}
@@ -155,7 +157,6 @@ export default function TopNavigation() {
           {session &&
             navigationItems.map((item) => {
               const isActive = pathname === item.href;
-              const Icon = item.icon;
 
               return (
                 <Link
@@ -172,7 +173,7 @@ export default function TopNavigation() {
                   }
                 `}
                 >
-                  <Icon className="h-5 w-5" />
+                  <CustomIcon name={item.icon} className="h-5 w-5" />
                   <span>{item.name}</span>
                 </Link>
               );
@@ -182,7 +183,7 @@ export default function TopNavigation() {
           {session ? (
             <div className="border-t border-slate-700 pt-4 mt-4">
               <div className="flex items-center px-3 py-2">
-                <HiOutlineUser className="h-10 w-10 text-slate-300" />
+                <CustomIcon name="user" className="h-10 w-10 text-slate-300" />
                 <div className="ml-3">
                   <div className="text-base font-medium text-white">
                     {session.user?.name}
@@ -196,7 +197,7 @@ export default function TopNavigation() {
                 onClick={() => signOut()}
                 className="flex items-center space-x-3 px-3 py-2 rounded-md text-base font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition-colors w-full text-left"
               >
-                <HiOutlineArrowRightOnRectangle className="h-5 w-5" />
+                <CustomIcon name="logout" className="h-5 w-5" />
                 <span>Sign out</span>
               </button>
             </div>
@@ -206,7 +207,7 @@ export default function TopNavigation() {
                 onClick={() => signIn("google")}
                 className="flex items-center space-x-3 px-3 py-2 rounded-md text-base font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition-colors w-full text-left"
               >
-                <HiOutlineUser className="h-5 w-5" />
+                <CustomIcon name="user" className="h-5 w-5" />
                 <span>Sign in</span>
               </button>
             </div>

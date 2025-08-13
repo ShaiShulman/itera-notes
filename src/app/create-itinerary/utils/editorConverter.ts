@@ -90,8 +90,7 @@ export function convertItineraryToEditorData(
           lng: place.lng,
           // Use enriched data from Google Places API if available
           placeId: place.placeId || "",
-          description:
-            place.description || `Location from itinerary: ${place.name}`,
+          description: place.description || ``,
           address: place.address || "",
           rating: place.rating || 0,
           photoReferences: place.photoReferences || [],
