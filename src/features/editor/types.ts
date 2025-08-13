@@ -72,6 +72,8 @@ export interface BasePlaceBlockData {
   hasBeenSearched?: boolean; // Track if place was found via initial search
   drivingTimeFromPrevious?: number;
   drivingDistanceFromPrevious?: number;
+  isDayFinish?: boolean; // Toggle for "Define as day finish"
+  hideInMap?: boolean; // Toggle for "Hide in map"
 }
 
 export interface PlaceBlockData extends BasePlaceBlockData {

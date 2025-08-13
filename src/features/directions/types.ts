@@ -1,3 +1,5 @@
+import { DirectionsResponse } from "@/services/google/directions";
+
 export interface DrivingDirections {
   color: string; // Day color for markers and polylines
   directionsResult: {
@@ -8,4 +10,11 @@ export interface DrivingDirections {
     }>;
     isFallbackStraightLine: boolean;
   } | null; // null if no directions calculated yet
+}
+
+// DirectionsData type for context and persistent storage
+export interface DirectionsData {
+  dayIndex: number;
+  color: string;
+  directionsResult: DirectionsResponse;
 }

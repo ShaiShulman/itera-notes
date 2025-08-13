@@ -2,6 +2,9 @@ import { MapData, MapPlace, DayData } from "../types";
 import { getDayColor } from "./colors";
 import { BasePlaceBlockData, DayBlockData } from "../../editor/types";
 
+// Module-level variable to track previous transform hash
+let previousTransformHash = "";
+
 // Editor.js block interface
 interface EditorBlock {
   type: string;
@@ -16,7 +19,7 @@ export function createEditorDataHash(blocks: EditorBlock[]): string {
   if (!blocks || blocks.length === 0) {
     return "empty";
   }
-  
+
   return blocks
     .map((block) => {
       if (block.type === "day") {
@@ -25,10 +28,10 @@ export function createEditorDataHash(blocks: EditorBlock[]): string {
       } else if (block.type === "place" || block.type === "hotel") {
         const placeData = block.data as BasePlaceBlockData;
         // Include all essential data that affects map display (excluding UI state like isExpanded)
-        const lat = placeData.lat || 'null';
-        const lng = placeData.lng || 'null'; 
-        const name = placeData.name || 'unnamed';
-        const uid = placeData.uid || 'no-uid';
+        const lat = placeData.lat || "null";
+        const lng = placeData.lng || "null";
+        const name = placeData.name || "unnamed";
+        const uid = placeData.uid || "no-uid";
         return `${block.type}:${name}:${lat}:${lng}:${uid}`;
       }
       return `${block.type}:unknown`;
@@ -40,28 +43,24 @@ export function createEditorDataHash(blocks: EditorBlock[]): string {
  * Transform Editor.js output data to MapData format
  */
 export function transformEditorDataToMapData(blocks: EditorBlock[]): MapData {
-  const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+  const timestamp = new Date().toISOString().split("T")[1].split(".")[0];
   console.log(
     `🔄 [${timestamp}] transformEditorDataToMapData called with`,
     blocks.length,
     "blocks"
   );
-  
+
   // Create detailed hash for tracking changes
   const currentHash = createEditorDataHash(blocks);
   console.log(`🔍 [${timestamp}] Current data hash:`, currentHash);
-  
+
   // Store previous hash for comparison (using a module-level variable)
-  if (!transformEditorDataToMapData.previousHash) {
-    transformEditorDataToMapData.previousHash = '';
+  if (!previousTransformHash) {
+    previousTransformHash = "";
   }
-  
-  if (transformEditorDataToMapData.previousHash === currentHash) {
-    console.log(`✅ [${timestamp}] Hash unchanged - data is identical, but transformation still proceeding`);
-  } else {
-    console.log(`🆕 [${timestamp}] Hash changed from:`, transformEditorDataToMapData.previousHash);
-    console.log(`🆕 [${timestamp}] Hash changed to:  `, currentHash);
-    transformEditorDataToMapData.previousHash = currentHash;
+
+  if (previousTransformHash !== currentHash) {
+    previousTransformHash = currentHash;
   }
 
   const days: DayData[] = [];
@@ -73,11 +72,9 @@ export function transformEditorDataToMapData(blocks: EditorBlock[]): MapData {
   blocks.forEach((block) => {
     if (block.type === "day") {
       const dayData = block.data as DayBlockData;
-      currentDayIndex = days.length;
+      currentDayIndex++;
       placeNumberInDay = 0; // Reset place counter for new day
       hotelNumberInDay = 0; // Reset hotel counter for new day
-
-      console.log(`📅 Day ${currentDayIndex + 1}:`, dayData.title);
 
       days.push({
         index: currentDayIndex,
@@ -129,7 +126,6 @@ export function transformEditorDataToMapData(blocks: EditorBlock[]): MapData {
     }
   });
 
-  console.log(`🎯 [${timestamp}] Result: ${days.length} days, ${places.length} places`);
   console.log(`🎯 [${timestamp}] Transformation complete - returning MapData`);
 
   return { days, places };

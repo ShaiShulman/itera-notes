@@ -5,7 +5,7 @@ import {
   AutocompleteLocationBias,
   PLACE_TYPE_CONFIGS,
 } from "./types";
-import { getIconForPlaceType, getPlaceTypeName } from "./icons";
+import { getIconForPlaceType } from "./icons";
 import { getPlaceDetailsAction } from "@/features/editor/actions/places";
 
 export function attachAutocomplete(
@@ -19,7 +19,6 @@ export function attachAutocomplete(
 
   // State
   let autocompleteService: google.maps.places.AutocompleteService;
-  let placesService: google.maps.places.PlacesService;
   let dropdown: HTMLElement | null = null;
   let currentPredictions: AutocompletePrediction[] = [];
   let searchTimeout: NodeJS.Timeout;
@@ -29,9 +28,6 @@ export function attachAutocomplete(
   // Initialize services
   try {
     autocompleteService = new google.maps.places.AutocompleteService();
-    // Create a dummy div for PlacesService (required by Google Maps API)
-    const dummyDiv = document.createElement("div");
-    placesService = new google.maps.places.PlacesService(dummyDiv);
   } catch (error) {
     console.error("Failed to initialize Google Places services:", error);
     throw new Error("Failed to initialize Google Places services");
@@ -59,6 +55,7 @@ export function attachAutocomplete(
       top: 100%;
       left: 0;
       right: 0;
+      width: 100%;
       background: white;
       border: 2px solid #10b981;
       border-top: none;
@@ -134,9 +131,14 @@ export function attachAutocomplete(
 
       // Main text (place name)
       const mainText = document.createElement("div");
+
+      // Check if this is a hotel type and apply purple color
+      const isHotel = prediction.types.includes("lodging");
+      const textColor = isHotel ? "#8b5cf6" : "#065f46";
+
       mainText.style.cssText = `
         font-weight: 600;
-        color: #065f46;
+        color: ${textColor};
         font-size: 14px;
         white-space: nowrap;
         overflow: hidden;
@@ -156,29 +158,14 @@ export function attachAutocomplete(
         font-weight: 400;
       `;
       addressText.textContent =
-        prediction.structured_formatting.secondary_text || "Address not available";
+        prediction.structured_formatting.secondary_text ||
+        "Address not available";
 
       contentContainer.appendChild(mainText);
       contentContainer.appendChild(addressText);
 
-      // Type badge
-      const typeBadge = document.createElement("div");
-      typeBadge.style.cssText = `
-        background: #f0f9ff;
-        color: #0369a1;
-        padding: 2px 6px;
-        border-radius: 10px;
-        font-size: 10px;
-        font-weight: 500;
-        flex-shrink: 0;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      `;
-      typeBadge.textContent = getPlaceTypeName(prediction.types);
-
       item.appendChild(iconContainer);
       item.appendChild(contentContainer);
-      item.appendChild(typeBadge);
 
       // Add hover effects
       item.addEventListener("mouseenter", () => {
@@ -328,24 +315,38 @@ export function attachAutocomplete(
     try {
       // Use cached server action instead of direct API call
       const placeDetails = await getPlaceDetailsAction(prediction.place_id);
-      
+
       if (placeDetails) {
         const enrichedPrediction: AutocompletePrediction = {
           ...prediction,
           // Add additional details from server response
           place_details: {
-            name: placeDetails.name || prediction.structured_formatting.main_text,
+            name:
+              placeDetails.name || prediction.structured_formatting.main_text,
             formatted_address: placeDetails.formatted_address || "",
-            geometry: placeDetails.geometry,
+            geometry: placeDetails.geometry
+              ? {
+                  location: new google.maps.LatLng(
+                    placeDetails.geometry.location.lat,
+                    placeDetails.geometry.location.lng
+                  ),
+                }
+              : undefined,
             rating: placeDetails.rating,
-            photos: placeDetails.photos,
+            photos: placeDetails.photos?.map((photo) => ({
+              ...photo,
+              getUrl: () =>
+                `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${photo.photo_reference}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`,
+              html_attributions: [],
+            })),
             editorial_summary: placeDetails.editorial_summary,
             types: placeDetails.types || prediction.types,
           },
         };
 
         // Update input value
-        input.value = placeDetails.name || prediction.structured_formatting.main_text;
+        input.value =
+          placeDetails.name || prediction.structured_formatting.main_text;
 
         // Call selection callback
         options.onSelect(enrichedPrediction);
@@ -450,6 +451,7 @@ export function attachAutocomplete(
         navigateDropdown("up");
         break;
       case "Enter":
+      case "Tab":
         e.preventDefault();
         const selectedItem = dropdown?.querySelector(
           ".autocomplete-item.selected"

@@ -9,10 +9,8 @@ import {
   getDayColor,
 } from "../utils/colors";
 import { DirectionsPolyRenderer } from "../../directions/directionsPolyRenderer";
-import {
-  getPlaceDetailsAction,
-  getPlacePhotoUrl,
-} from "@/features/editor/actions/places";
+import { getPlaceDetailsAction } from "@/features/editor/actions/places";
+import { getPlacePhotoUrl } from "@/features/editor/utils/photoUtils";
 import { PlaceLocation } from "@/services/openai/itinerary";
 import { useItinerary } from "@/contexts/ItineraryContext";
 import { AddPlacePopup } from "./AddPlacePopup";
@@ -314,23 +312,15 @@ export const GoogleMap = React.memo(function GoogleMap({
       if (placeDetails) {
         console.log("✅ Place details found:", placeDetails.name);
 
-        // Convert photo references to proper URLs
-        const photoReferences = await Promise.all(
-          (placeDetails.photos || [])
-            .slice(0, 4)
-            .map(
-              async (photo) =>
-                await getPlacePhotoUrl(photo.photo_reference, 400)
-            )
-        );
+        // Store raw photo references (not URLs)
+        const photoReferences = (placeDetails.photos || [])
+          .slice(0, 4)
+          .map((photo) => photo.photo_reference);
 
-        // Get thumbnail URL for first photo
+        // Get thumbnail reference for first photo
         const thumbnailUrl =
           placeDetails.photos && placeDetails.photos.length > 0
-            ? await getPlacePhotoUrl(
-                placeDetails.photos[0].photo_reference,
-                150
-              )
+            ? placeDetails.photos[0].photo_reference
             : undefined;
 
         const placeData: PlaceLocation = {

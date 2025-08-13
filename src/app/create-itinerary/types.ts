@@ -7,15 +7,7 @@ export const newItinerarySchema = z
       .string()
       .min(1, "Destination is required")
       .max(100, "Destination is too long"),
-    startDate: z
-      .string()
-      .min(1, "Start date is required")
-      .refine((date: string) => {
-        const startDate = new Date(date);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        return startDate >= today;
-      }, "Start date must be today or later"),
+    startDate: z.string().min(1, "Start date is required"),
     endDate: z.string().min(1, "End date is required"),
     interests: z
       .array(z.string())

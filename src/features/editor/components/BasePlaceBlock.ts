@@ -11,6 +11,29 @@ import {
   boundsToLocationBias,
 } from "@/features/map/boundsManager";
 import { AutocompleteLocationBias } from "@/features/autocomplete/types";
+import { findPlaceByNameAction } from "../actions/places";
+import { createImageSkeleton } from "@/components/ui/skeleton";
+import { IconLoader, IconPaths } from "@/assets/icons/iconLoader";
+import { BUTTON_DIMENSIONS, ICON_DIMENSIONS, BUTTON_STYLES } from "./constants";
+
+// Debounce mechanism for place numbering updates
+let numberingUpdateTimeout: NodeJS.Timeout | null = null;
+
+// Global utility function to trigger place numbering updates
+export function triggerPlaceNumberingUpdate() {
+  if (typeof window !== "undefined") {
+    // Debounce the numbering updates to avoid excessive triggering
+    if (numberingUpdateTimeout) {
+      clearTimeout(numberingUpdateTimeout);
+    }
+
+    numberingUpdateTimeout = setTimeout(() => {
+      console.log("🔢 Triggering global place numbering update");
+      window.dispatchEvent(new CustomEvent("editor:updatePlaceNumbers"));
+      numberingUpdateTimeout = null;
+    }, 200); // 200ms debounce
+  }
+}
 
 export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
   protected data: T;
@@ -20,6 +43,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
   protected autocompleteInstance: AutocompleteInstance | null = null;
   protected currentMapBounds: MapBounds | null = null;
   private boundsChangeCleanup: (() => void) | null = null;
+  private loadingSpinner: HTMLElement | null = null;
 
   // Editing state management
   private originalName: string = "";
@@ -46,6 +70,12 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         "editor:updateDrivingTimes",
         this.handleDrivingTimeUpdate
       );
+
+      // Listen for place numbering updates
+      window.addEventListener(
+        "editor:updatePlaceNumbers",
+        this.handlePlaceNumberingUpdate
+      );
     }
 
     // Listen for map bounds changes
@@ -68,6 +98,40 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       }
 
       console.log(`🚗 ${this.blockType}: Updated driving time to ${time}m`);
+    }
+  };
+
+  // Handler for place numbering updates
+  private handlePlaceNumberingUpdate = () => {
+    // Only update numbering if the block is currently rendered and collapsed (where numbering is shown)
+    if (this.wrapper && !this.isExpanded && !this.isCurrentlyEditing()) {
+      // Check if the number actually changed before re-rendering
+      const currentNumber = this.calculatePlaceNumber();
+      const existingNumberBadge = this.wrapper.querySelector(
+        'div[style*="border-radius: 50%"]'
+      ) as HTMLElement;
+
+      if (existingNumberBadge) {
+        const existingNumber = existingNumberBadge.textContent;
+        const expectedNumber = this.getPlaceNumberDisplay(currentNumber);
+
+        if (existingNumber === expectedNumber) {
+          // Number hasn't changed, no need to re-render
+          return;
+        }
+
+        // Only update the number badge to avoid refreshing photos
+        existingNumberBadge.textContent = expectedNumber;
+        console.log(
+          `🔢 ${this.blockType}: Updated place number for ${this.data.name} from ${existingNumber} to ${expectedNumber}`
+        );
+      } else {
+        // Number badge doesn't exist, need full re-render
+        console.log(
+          `🔢 ${this.blockType}: Full re-render needed for numbering ${this.data.name}`
+        );
+        this.renderCollapsed();
+      }
     }
   };
 
@@ -105,6 +169,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
   ) {
     this.data.status = "loading";
     this.updateStatusIndicator(statusIndicator, "loading");
+    this.showLoadingSpinner();
 
     // Extract place details from the prediction
     const placeDetails = (prediction as any).place_details;
@@ -113,11 +178,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       // Extract coordinates from geometry - handle both function and property formats
       let lat = 0;
       let lng = 0;
-      
+
       if (placeDetails.geometry?.location) {
         const location = placeDetails.geometry.location;
         // Check if lat/lng are functions (Google Maps API format)
-        if (typeof location.lat === 'function') {
+        if (typeof location.lat === "function") {
           lat = location.lat();
           lng = location.lng();
         } else {
@@ -139,18 +204,20 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         photoReferences:
           placeDetails.photos
             ?.map((photo: any) => {
-              console.log("Photo object:", photo);
-              if (photo.getUrl) {
-                return photo.getUrl({ maxWidth: 400 });
-              }
-              // Fallback for other formats
-              return "";
+              const photoRef = photo.photo_reference;
+              console.log(
+                "Photo reference:",
+                photoRef
+                  ? `${photoRef.substring(0, 20)}...${photoRef.substring(
+                      photoRef.length - 20
+                    )}`
+                  : "none"
+              );
+              return photoRef;
             })
             .filter(Boolean) || [],
         description: placeDetails.editorial_summary?.overview || "",
-        thumbnailUrl: placeDetails.photos?.[0]?.getUrl
-          ? placeDetails.photos[0].getUrl({ maxWidth: 100 })
-          : "",
+        thumbnailUrl: placeDetails.photos?.[0]?.photo_reference || "",
         status: "found",
       };
     } else {
@@ -169,6 +236,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     this.isCurrentlyEditingName = false;
 
     this.updateStatusIndicator(statusIndicator, "found");
+    this.hideLoadingSpinner();
 
     // Auto-collapse after successful selection
     setTimeout(() => {
@@ -217,9 +285,85 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       onSelect: (prediction) => {
         this.handleAutocompleteSelection(prediction, statusIndicator);
       },
+      onFreeTextSearch: async (text) => {
+        // Check if this is an existing place (has placeId) - if so, just treat as free text
+        const wasExistingPlace = !!this.originalName && !!this.data.placeId;
+
+        if (wasExistingPlace) {
+          // For existing places, just update the name as free text
+          this.data.name = text;
+          this.data.status = "free-text";
+          this.updateStatusIndicator(statusIndicator, "free-text");
+          console.log(
+            `📝 ${this.blockType}: Existing place renamed to "${text}" (free text)`
+          );
+        } else {
+          // For new places (no placeId), try to search for the text as a place
+          this.data.status = "loading";
+          this.updateStatusIndicator(statusIndicator, "loading");
+          this.showLoadingSpinner();
+
+          try {
+            const searchResult = await findPlaceByNameAction(text);
+
+            if (searchResult.success && searchResult.place) {
+              // Place found! Update data with found place details
+              this.data = {
+                ...this.data,
+                placeId: searchResult.place.placeId,
+                name: searchResult.place.name,
+                address: searchResult.place.address,
+                lat: searchResult.place.lat,
+                lng: searchResult.place.lng,
+                rating: searchResult.place.rating || 0,
+                photoReferences: searchResult.place.photoReferences,
+                description: searchResult.place.description || "",
+                thumbnailUrl: searchResult.place.thumbnailUrl || "",
+                status: "found",
+              };
+
+              // Update currentInputValue to the found place name
+              this.currentInputValue = searchResult.place.name;
+
+              this.updateStatusIndicator(statusIndicator, "found");
+              this.hideLoadingSpinner();
+              console.log(
+                `🔍 ${this.blockType}: Found place "${searchResult.place.name}" for query "${text}"`
+              );
+            } else {
+              // No place found, treat as free text
+              this.data.name = text;
+              this.data.status = "not-found";
+              this.updateStatusIndicator(statusIndicator, "not-found");
+              this.hideLoadingSpinner();
+              console.log(
+                `🔍 ${this.blockType}: No place found for "${text}", treating as free text`
+              );
+            }
+          } catch (error) {
+            console.error(
+              `🔍 ${this.blockType}: Search error for "${text}":`,
+              error
+            );
+            // Error occurred, treat as free text
+            this.data.name = text;
+            this.data.status = "not-found";
+            this.updateStatusIndicator(statusIndicator, "not-found");
+            this.hideLoadingSpinner();
+          }
+        }
+
+        this.commitEdit();
+        this.renderCollapsed(false);
+
+        // Trigger editor change event
+        if (this.wrapper) {
+          const changeEvent = new Event("input", { bubbles: true });
+          this.wrapper.dispatchEvent(changeEvent);
+        }
+      },
       onFreeText: (text) => {
-        // This shouldn't be called in the new system since we handle Enter manually
-        // But keep it for compatibility
+        // Fallback handler (shouldn't be called with onFreeTextSearch present)
         this.currentInputValue = text;
         this.commitEdit();
         this.renderCollapsed(false);
@@ -254,7 +398,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
 
     // Start in editing mode if no place is set
     const shouldStartEditing = !this.data.placeId && !this.data.name;
-    this.renderCollapsed(shouldStartEditing);
+
+    // Use setTimeout to ensure DOM is fully updated before calculating place numbers
+    setTimeout(() => {
+      this.renderCollapsed(shouldStartEditing);
+    }, 0);
 
     // Add click handler for expand/collapse (only when not editing)
     this.wrapper.addEventListener("click", (e) => {
@@ -283,6 +431,31 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       }
     });
 
+    // Add event listener for uncheck day finish
+    this.wrapper.addEventListener("place:uncheckDayFinish", (e) => {
+      e.stopPropagation();
+      const customEvent = e as CustomEvent;
+      const { excludeUid } = customEvent.detail;
+
+      // Only uncheck if this is not the place that triggered the uncheck
+      if (this.data.uid !== excludeUid && this.data.isDayFinish) {
+        this.data.isDayFinish = false;
+
+        // Re-render the collapsed view to show the updated button state
+        if (!this.isExpanded) {
+          this.renderCollapsed(false);
+        }
+
+        // Trigger editor change event
+        const changeEvent = new Event("input", { bubbles: true });
+        this.wrapper?.dispatchEvent(changeEvent);
+
+        console.log(
+          `🏁 ${this.blockType}: Unchecked day finish for ${this.data.name} due to another place being marked as finish`
+        );
+      }
+    });
+
     return this.wrapper;
   }
 
@@ -302,16 +475,10 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     if (this.isCurrentlyEditingName) {
       this.data.name = this.currentInputValue;
 
-      // Check if this creates a free text override for existing place
-      if (this.isFreeTextForExistingPlace()) {
-        this.data.status = "free-text";
-        console.log(
-          `${this.blockType}: Committed free text override "${this.currentInputValue}" for existing place`
-        );
-      } else {
-        console.log(
-          `${this.blockType}: Committed edit "${this.currentInputValue}"`
-        );
+      // Only override status if it's not already "found" from a successful search
+      if (this.data.status !== "found") {
+        // Check if this creates a free text override for existing place
+        if (this.isFreeTextForExistingPlace()) this.data.status = "free-text";
       }
 
       this.isCurrentlyEditingName = false;
@@ -336,13 +503,22 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
   }
 
   protected calculatePlaceNumber(): number {
-    // Find this place's position among all blocks of the same type within the same day
+    // Find this place's position among blocks of the SAME TYPE within the same day
     const editorElement = this.wrapper?.closest(".codex-editor");
-    if (!editorElement) return 1;
+    if (!editorElement) {
+      console.log(`${this.blockType}: No editor element found, returning 1`);
+      return 1;
+    }
 
     const allBlocks = editorElement.querySelectorAll(".ce-block");
     let placeNumberInDay = 1;
     let foundCurrentPlace = false;
+    let currentDay = 0;
+    const blockTypeClass = `.${this.blockType.toLowerCase()}-block`;
+
+    console.log(
+      `${this.blockType}: Calculating number for "${this.data.name}" among ${allBlocks.length} blocks`
+    );
 
     // Find all blocks and track day/place progression
     for (let i = 0; i < allBlocks.length; i++) {
@@ -350,11 +526,27 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
 
       // Check if this block contains a day block
       if (block.querySelector(".day-block")) {
+        currentDay++;
         placeNumberInDay = 1; // Reset place counter for new day
+        console.log(
+          `${this.blockType}: Found day ${currentDay}, resetting counter to 1`
+        );
       }
-      // Check if this block contains a block of the same type as this one
-      else if (block.querySelector(`.${this.blockType.toLowerCase()}-block`)) {
-        if (block.contains(this.wrapper)) {
+      // Check if this block contains a block of the SAME TYPE as this one
+      else if (block.querySelector(blockTypeClass)) {
+        const blockElement = block.querySelector(blockTypeClass);
+        const isCurrentBlock =
+          blockElement && blockElement.contains(this.wrapper);
+
+        console.log(
+          `${
+            this.blockType
+          }: Found ${this.blockType.toLowerCase()} block #${placeNumberInDay} in day ${currentDay}${
+            isCurrentBlock ? " (THIS BLOCK)" : ""
+          }`
+        );
+
+        if (isCurrentBlock) {
           foundCurrentPlace = true;
           break;
         }
@@ -362,14 +554,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       }
     }
 
+    const finalNumber = foundCurrentPlace ? placeNumberInDay : 1;
     console.log(
-      `${
-        this.blockType
-      }: Calculated ${this.blockType.toLowerCase()} number ${placeNumberInDay} for ${
-        this.data.name
-      }`
+      `${this.blockType}: Final calculated number ${finalNumber} for "${this.data.name}" (found=${foundCurrentPlace})`
     );
-    return foundCurrentPlace ? placeNumberInDay : 1;
+    return finalNumber;
   }
 
   protected renderCollapsed(isEditing: boolean = false) {
@@ -378,6 +567,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     // Clean up existing autocomplete instance when switching modes
     if (!isEditing) {
       this.cleanupAutocomplete();
+      this.loadingSpinner = null;
     }
 
     this.wrapper.innerHTML = "";
@@ -413,21 +603,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     `;
     numberBadge.textContent = this.getPlaceNumberDisplay(placeNumber);
 
-    // Block type badge
-    const badge = document.createElement("div");
-    badge.style.cssText = `
-      background: ${this.primaryColor};
-      color: white;
-      padding: 4px 10px;
-      border-radius: 16px;
-      font-weight: bold;
-      font-size: 12px;
-      margin-right: 12px;
-      display: flex;
-      align-items: center;
-    `;
-    badge.innerHTML = `${this.getBlockIcon()}${this.blockTitle}`;
-
     // Main content container - consistent structure
     const contentContainer = document.createElement("div");
     contentContainer.style.cssText =
@@ -435,22 +610,70 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
 
     // Thumbnail (if available and confirmed)
     if (!isEditing && this.data.thumbnailUrl) {
+      const thumbnailContainer = document.createElement("div");
+      thumbnailContainer.style.cssText = `
+        width: 24px;
+        height: 24px;
+        flex-shrink: 0;
+        position: relative;
+      `;
+
       const thumbnail = document.createElement("img");
-      thumbnail.src = this.data.thumbnailUrl;
+      thumbnail.src = `/api/places/photos/${this.data.thumbnailUrl}?width=150`;
       thumbnail.style.cssText = `
         width: 24px;
         height: 24px;
         border-radius: 4px;
         object-fit: cover;
-        flex-shrink: 0;
+        opacity: 0;
+        transition: opacity 0.3s ease;
       `;
-      contentContainer.appendChild(thumbnail);
+
+      // Only show skeleton if image doesn't load quickly (indicating it's not cached)
+      let skeleton: HTMLElement | null = null;
+      let showSkeletonTimeout: number | null = null;
+
+      // Show skeleton after 50ms if image hasn't loaded (not cached)
+      showSkeletonTimeout = window.setTimeout(() => {
+        skeleton = createImageSkeleton("24px", "24px");
+        thumbnailContainer.appendChild(skeleton);
+        showSkeletonTimeout = null;
+      }, 50);
+
+      thumbnail.addEventListener("load", () => {
+        // Cancel skeleton if image loads quickly (cached)
+        if (showSkeletonTimeout) {
+          clearTimeout(showSkeletonTimeout);
+          showSkeletonTimeout = null;
+        }
+        // Remove skeleton if it was shown
+        if (skeleton) {
+          skeleton.remove();
+        }
+        thumbnail.style.opacity = "1";
+      });
+
+      thumbnail.addEventListener("error", () => {
+        // Cancel skeleton timeout
+        if (showSkeletonTimeout) {
+          clearTimeout(showSkeletonTimeout);
+          showSkeletonTimeout = null;
+        }
+        // Remove skeleton if it was shown
+        if (skeleton) {
+          skeleton.remove();
+        }
+        // Keep the container but show nothing on error
+      });
+
+      thumbnailContainer.appendChild(thumbnail);
+      contentContainer.appendChild(thumbnailContainer);
     }
 
     // Name/Input container
     const nameContainer = document.createElement("div");
     nameContainer.style.cssText =
-      "flex: 1; display: flex; align-items: center; position: relative;";
+      "flex: 1; display: flex; align-items: center; position: relative; min-width: 0;";
 
     if (isEditing) {
       // Start editing mode
@@ -460,6 +683,10 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       const inputContainer = document.createElement("div");
       inputContainer.style.cssText = `
         position: relative;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        min-width: 0;
         width: 100%;
       `;
 
@@ -473,7 +700,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         background: white;
         border: 2px solid ${this.primaryColor};
         border-radius: 6px;
-        padding: 6px 12px;
+        padding: 6px 80px 6px 12px;
         font-size: 14px;
         font-weight: 500;
         color: #065f46;
@@ -490,9 +717,86 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         onSelect: (prediction) => {
           this.handleAutocompleteSelection(prediction, statusIndicator);
         },
+        onFreeTextSearch: async (text) => {
+          // Check if this is an existing place (has placeId) - if so, just treat as free text
+          const wasExistingPlace = !!this.originalName && !!this.data.placeId;
+
+          if (wasExistingPlace) {
+            // For existing places, just update the name as free text
+            this.data.name = text;
+            this.data.status = "free-text";
+            this.updateStatusIndicator(statusIndicator, "free-text");
+            console.log(
+              `📝 ${this.blockType}: Existing place renamed to "${text}" (free text)`
+            );
+          } else {
+            // For new places (no placeId), try to search for the text as a place
+            this.data.status = "loading";
+            this.updateStatusIndicator(statusIndicator, "loading");
+            this.showLoadingSpinner();
+
+            try {
+              const searchResult = await findPlaceByNameAction(text);
+
+              if (searchResult.success && searchResult.place) {
+                // Place found! Update data with found place details
+                this.data = {
+                  ...this.data,
+                  placeId: searchResult.place.placeId,
+                  name: searchResult.place.name,
+                  address: searchResult.place.address,
+                  lat: searchResult.place.lat,
+                  lng: searchResult.place.lng,
+                  rating: searchResult.place.rating || 0,
+                  photoReferences: searchResult.place.photoReferences,
+                  description: searchResult.place.description || "",
+                  thumbnailUrl: searchResult.place.thumbnailUrl || "",
+                  status: "found",
+                };
+
+                // Update currentInputValue to the found place name
+                this.currentInputValue = searchResult.place.name;
+
+                this.updateStatusIndicator(statusIndicator, "found");
+                this.hideLoadingSpinner();
+                console.log(
+                  `🔍 ${this.blockType}: Found place "${searchResult.place.name}" for query "${text}"`
+                );
+              } else {
+                // No place found, treat as free text
+                this.data.name = text;
+                this.data.status = "not-found";
+                this.updateStatusIndicator(statusIndicator, "not-found");
+                this.hideLoadingSpinner();
+                console.log(
+                  `🔍 ${this.blockType}: No place found for "${text}", treating as free text`
+                );
+              }
+            } catch (error) {
+              console.error(
+                `🔍 ${this.blockType}: Search error for "${text}":`,
+                error
+              );
+              // Error occurred, treat as free text
+              this.data.name = text;
+              this.data.status = "not-found";
+              this.updateStatusIndicator(statusIndicator, "not-found");
+              this.hideLoadingSpinner();
+            }
+          }
+
+          this.commitEdit();
+          this.renderCollapsed(false);
+
+          // Trigger editor change event
+          if (this.wrapper) {
+            const changeEvent = new Event("input", { bubbles: true });
+            this.wrapper.dispatchEvent(changeEvent);
+          }
+        },
         onFreeText: (text) => {
+          // Fallback handler (shouldn't be called with onFreeTextSearch present)
           this.data.name = text;
-          // For empty blocks (no placeId), mark as "not-found" if place couldn't be found
           this.data.status = this.data.placeId ? "free-text" : "not-found";
           this.updateStatusIndicator(statusIndicator, this.data.status);
           this.renderCollapsed(false);
@@ -508,29 +812,9 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         // Don't update this.data.name until Enter or autocomplete selection
       });
 
-      // Handle Enter and Escape keys
+      // Handle Escape key (Enter and Tab are handled by autocomplete)
       placeInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          e.stopPropagation();
-
-          // Commit the current input value
-          this.commitEdit();
-          
-          // For empty blocks (no placeId), set status to "not-found" if no autocomplete selection was made
-          if (!this.data.placeId && this.currentInputValue) {
-            this.data.status = "not-found";
-          }
-
-          // Exit editing mode and re-render
-          this.renderCollapsed(false);
-
-          // Trigger editor change event
-          if (this.wrapper) {
-            const changeEvent = new Event("input", { bubbles: true });
-            this.wrapper.dispatchEvent(changeEvent);
-          }
-        } else if (e.key === "Escape") {
+        if (e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
 
@@ -559,7 +843,131 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         }, 200);
       });
 
+      // Create confirm and cancel buttons inside the input
+      const confirmButton = document.createElement("button");
+      confirmButton.type = "button";
+      confirmButton.style.cssText = `
+        position: absolute;
+        right: 36px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: ${this.primaryColor};
+        color: white;
+        border: none;
+        padding: 4px;
+        border-radius: 3px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        transition: all 0.2s ease;
+        z-index: 10;
+      `;
+      confirmButton.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2"/>
+        </svg>
+      `;
+      confirmButton.title = "Confirm";
+
+      const cancelButton = document.createElement("button");
+      cancelButton.type = "button";
+      cancelButton.style.cssText = `
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: #ef4444;
+        color: white;
+        border: none;
+        padding: 4px;
+        border-radius: 3px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        transition: all 0.2s ease;
+        z-index: 10;
+      `;
+      cancelButton.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2"/>
+          <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2"/>
+        </svg>
+      `;
+      cancelButton.title = "Cancel";
+
+      // Create spinner element and store reference
+      const spinner = document.createElement("div");
+      this.loadingSpinner = spinner;
+      spinner.style.cssText = `
+        position: absolute;
+        right: 110px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 16px;
+        height: 16px;
+        border: 2px solid #e5e7eb;
+        border-top: 2px solid ${this.primaryColor};
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        display: none;
+        z-index: 10;
+      `;
+
+      // Add CSS animation for spinner
+      if (!document.getElementById("spinner-styles")) {
+        const style = document.createElement("style");
+        style.id = "spinner-styles";
+        style.textContent = `
+          @keyframes spin {
+            0% { transform: translateY(-50%) rotate(0deg); }
+            100% { transform: translateY(-50%) rotate(360deg); }
+          }
+        `;
+        document.head.appendChild(style);
+      }
+
+      // Add event listeners for buttons
+      confirmButton.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const enterEvent = new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        });
+        placeInput.dispatchEvent(enterEvent);
+      });
+
+      cancelButton.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.revertEdit();
+        this.renderCollapsed(false);
+      });
+
+      // Add hover effects
+      confirmButton.addEventListener("mouseenter", () => {
+        confirmButton.style.transform = "translateY(-50%) scale(1.1)";
+      });
+      confirmButton.addEventListener("mouseleave", () => {
+        confirmButton.style.transform = "translateY(-50%) scale(1)";
+      });
+
+      cancelButton.addEventListener("mouseenter", () => {
+        cancelButton.style.transform = "translateY(-50%) scale(1.1)";
+      });
+      cancelButton.addEventListener("mouseleave", () => {
+        cancelButton.style.transform = "translateY(-50%) scale(1)";
+      });
+
       inputContainer.appendChild(placeInput);
+      inputContainer.appendChild(spinner);
+      inputContainer.appendChild(confirmButton);
+      inputContainer.appendChild(cancelButton);
       nameContainer.appendChild(inputContainer);
 
       // Focus the input
@@ -601,7 +1009,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         e.stopPropagation();
         placeName.style.color = isFreeText ? "#6b7280" : "#065f46";
       });
-      
+
       // Make place name clickable to enter edit mode
       placeName.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -609,27 +1017,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       });
 
       placeNameContainer.appendChild(placeName);
-
-      // Add alert icon and tooltip for free text
-      if (isFreeText) {
-        const alertIcon = document.createElement("div");
-        alertIcon.style.cssText = `
-          color: #f59e0b;
-          cursor: help;
-          display: flex;
-          align-items: center;
-        `;
-        alertIcon.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2L2 7v10c0 5.55 3.84 9.32 9 9.32s9-3.77 9-9.32V7l-10-5z"/>
-            <path d="M12 8v4M12 16h0"/>
-          </svg>
-        `;
-        alertIcon.title =
-          "This is a custom name for the place. The original place data is preserved.";
-
-        placeNameContainer.appendChild(alertIcon);
-      }
 
       nameContainer.appendChild(placeNameContainer);
     } else if (!this.data.name) {
@@ -676,7 +1063,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         e.stopPropagation();
         placeName.style.color = "#374151";
       });
-      
+
       // Make place name clickable to enter edit mode
       placeName.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -684,24 +1071,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       });
 
       notFoundContainer.appendChild(placeName);
-
-      // Add red alert icon for place not found
-      const alertIcon = document.createElement("div");
-      alertIcon.style.cssText = `
-        color: #ef4444;
-        cursor: help;
-        display: flex;
-        align-items: center;
-      `;
-      alertIcon.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2L2 7v10c0 5.55 3.84 9.32 9 9.32s9-3.77 9-9.32V7l-10-5z"/>
-          <path d="M12 8v4M12 16h0"/>
-        </svg>
-      `;
-      alertIcon.title = "Place cannot be found. This is a custom text entry.";
-
-      notFoundContainer.appendChild(alertIcon);
       nameContainer.appendChild(notFoundContainer);
     }
 
@@ -718,6 +1087,8 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       justify-content: center;
       flex-shrink: 0;
     `;
+    statusIndicator.title =
+      "This is a custom name for the place. The original place data is preserved.";
 
     if (isEditing) {
       this.updateStatusIndicator(statusIndicator, this.data.status || "idle");
@@ -744,56 +1115,9 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       statusIndicator.style.display = "none";
     }
 
-    contentContainer.appendChild(statusIndicator);
-
-    // Edit/Confirm button (only show when editing)
-    if (isEditing) {
-      const actionButton = document.createElement("button");
-      actionButton.style.cssText = `
-        background: ${this.primaryColor};
-        color: white;
-        border: none;
-        padding: 6px;
-        border-radius: 4px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 28px;
-        height: 28px;
-        transition: all 0.2s ease;
-        flex-shrink: 0;
-      `;
-
-      // Show confirm button
-      actionButton.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2"/>
-        </svg>
-      `;
-      actionButton.title = `Confirm ${this.blockType.toLowerCase()}`;
-
-      actionButton.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const input = nameContainer.querySelector(
-          'input[data-editing="true"]'
-        ) as HTMLInputElement;
-        if (input) {
-          // Simulate Enter key press to use our new editing system
-          const enterEvent = new KeyboardEvent("keydown", { key: "Enter" });
-          input.dispatchEvent(enterEvent);
-        }
-      });
-
-      actionButton.addEventListener("mouseenter", () => {
-        actionButton.style.transform = "scale(1.05)";
-      });
-
-      actionButton.addEventListener("mouseleave", () => {
-        actionButton.style.transform = "scale(1)";
-      });
-
-      contentContainer.appendChild(actionButton);
+    // Only show status indicator when not editing
+    if (!isEditing) {
+      contentContainer.appendChild(statusIndicator);
     }
 
     // Driving time display (if available and confirmed)
@@ -818,12 +1142,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         this.data.drivingDistanceFromPrevious || 0
       );
 
-      drivingTime.innerHTML = `
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-          <path d="M5 12V7a1 1 0 0 1 1-1h4l2-3h2l2 3h4a1 1 0 0 1 1 1v5" stroke="currentColor" stroke-width="2" fill="none"/>
-          <circle cx="7" cy="17" r="2" stroke="currentColor" stroke-width="2" fill="none"/>
-          <circle cx="17" cy="17" r="2" stroke="currentColor" stroke-width="2" fill="none"/>
-        </svg>
+      drivingTime.innerHTML = `<svg fill="#000000" width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6.62,13.08a.9.9,0,0,0-.54.54,1,1,0,0,0,1.3,1.3,1.15,1.15,0,0,0,.33-.21,1.15,1.15,0,0,0,.21-.33A.84.84,0,0,0,8,14a1.05,1.05,0,0,0-.29-.71A1,1,0,0,0,6.62,13.08Zm13.14-4L18.4,5.05a3,3,0,0,0-2.84-2H8.44A3,3,0,0,0,5.6,5.05L4.24,9.11A3,3,0,0,0,2,12v4a3,3,0,0,0,2,2.82V20a1,1,0,0,0,2,0V19H18v1a1,1,0,0,0,2,0V18.82A3,3,0,0,0,22,16V12A3,3,0,0,0,19.76,9.11ZM7.49,5.68A1,1,0,0,1,8.44,5h7.12a1,1,0,0,1,1,.68L17.61,9H6.39ZM20,16a1,1,0,0,1-1,1H5a1,1,0,0,1-1-1V12a1,1,0,0,1,1-1H19a1,1,0,0,1,1,1Zm-3.38-2.92a.9.9,0,0,0-.54.54,1,1,0,0,0,1.3,1.3.9.9,0,0,0,.54-.54A.84.84,0,0,0,18,14a1.05,1.05,0,0,0-.29-.71A1,1,0,0,0,16.62,13.08ZM13,13H11a1,1,0,0,0,0,2h2a1,1,0,0,0,0-2Z"/></svg>
         ${formattedDriving}
       `;
       contentContainer.appendChild(drivingTime);
@@ -831,9 +1150,33 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
 
     // Expand arrow (show if place exists or has a name for notes)
     const rightContent = document.createElement("div");
-    rightContent.style.cssText = "display: flex; align-items: center;";
+    rightContent.style.cssText =
+      "display: flex; align-items: center; gap: 4px;";
 
+    // Action buttons (show when not editing and has a name)
     if (!isEditing && this.data.name) {
+      const buttonsContainer = document.createElement("div");
+      buttonsContainer.style.cssText =
+        "display: flex; align-items: center; gap: 4px; margin-right: 4px;";
+
+      // Create all buttons in the correct order
+      this.createActionButtonsInOrder(buttonsContainer);
+
+      rightContent.appendChild(buttonsContainer);
+
+      // Expand arrow
+      const expandArrow = document.createElement("div");
+      expandArrow.style.cssText = `
+        color: ${this.primaryColor};
+        font-size: 18px;
+        transform: rotate(${this.isExpanded ? "180deg" : "0deg"});
+        transition: transform 0.2s ease;
+        margin-left: 4px;
+      `;
+      expandArrow.innerHTML = "▼";
+      rightContent.appendChild(expandArrow);
+    } else if (!isEditing && !this.data.name) {
+      // Just show expand arrow for empty blocks
       const expandArrow = document.createElement("div");
       expandArrow.style.cssText = `
         color: ${this.primaryColor};
@@ -847,7 +1190,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     }
 
     leftContent.appendChild(numberBadge);
-    leftContent.appendChild(badge);
     leftContent.appendChild(contentContainer);
     header.appendChild(leftContent);
     header.appendChild(rightContent);
@@ -856,6 +1198,9 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
 
   protected renderExpanded() {
     if (!this.wrapper) return;
+
+    // Exit edit mode for all other elements when this one is expanded
+    this.exitEditModeForOtherElements();
 
     this.wrapper.innerHTML = "";
     this.wrapper.style.padding = "16px 20px";
@@ -882,21 +1227,37 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     const leftContent = document.createElement("div");
     leftContent.style.cssText = "display: flex; align-items: center;";
 
-    // Block badge
-    const badge = document.createElement("div");
-    badge.style.cssText = `
+    // Place number badge (circular) - keep when expanded
+    const placeNumber = this.calculatePlaceNumber();
+    const numberBadge = document.createElement("div");
+    numberBadge.style.cssText = `
       background: ${this.primaryColor};
       color: white;
-      padding: 6px 12px;
-      border-radius: 20px;
-      font-weight: bold;
-      font-size: 14px;
-      margin-right: 12px;
-      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
       display: flex;
       align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 12px;
+      margin-right: 12px;
+      flex-shrink: 0;
     `;
-    badge.innerHTML = `${this.getBlockIcon()}${this.blockTitle}`;
+    numberBadge.textContent = this.getPlaceNumberDisplay(placeNumber);
+
+    // Block type icon (house for hotels, marker for places)
+    const typeIcon = document.createElement("div");
+    typeIcon.style.cssText = `
+      color: ${this.primaryColor};
+      margin-right: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+    `;
+    typeIcon.innerHTML = this.getBlockIcon();
 
     const placeNameContainer = document.createElement("div");
     placeNameContainer.style.cssText =
@@ -918,25 +1279,25 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     placeNameContainer.appendChild(placeName);
 
     // Add alert icon and tooltip for free text in expanded mode
-    if (isFreeText) {
-      const alertIcon = document.createElement("div");
-      alertIcon.style.cssText = `
-        color: #f59e0b;
-        cursor: help;
-        display: flex;
-        align-items: center;
-      `;
-      alertIcon.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2L2 7v10c0 5.55 3.84 9.32 9 9.32s9-3.77 9-9.32V7l-10-5z"/>
-          <path d="M12 8v4M12 16h0"/>
-        </svg>
-      `;
-      alertIcon.title =
-        "This is a custom name for the place. The original place data is preserved.";
+    // if (isFreeText) {
+    //   const alertIcon = document.createElement("div");
+    //   alertIcon.style.cssText = `
+    //     color: #f59e0b;
+    //     cursor: help;
+    //     display: flex;
+    //     align-items: center;
+    //   `;
+    //   alertIcon.innerHTML = `
+    //     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    //       <path d="M12 2L2 7v10c0 5.55 3.84 9.32 9 9.32s9-3.77 9-9.32V7l-10-5z"/>
+    //       <path d="M12 8v4M12 16h0"/>
+    //     </svg>
+    //   `;
+    //   alertIcon.title =
+    //     "This is a custom name for the place. The original place data is preserved.";
 
-      placeNameContainer.appendChild(alertIcon);
-    }
+    //   placeNameContainer.appendChild(alertIcon);
+    // }
 
     // Make place name clickable to enter edit mode
     placeName.style.cursor = "pointer";
@@ -944,11 +1305,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       e.stopPropagation();
       this.renderCollapsed(true);
     });
-    
+
     placeName.addEventListener("mouseenter", () => {
       placeName.style.textDecoration = "underline";
     });
-    
+
     placeName.addEventListener("mouseleave", () => {
       placeName.style.textDecoration = "none";
     });
@@ -963,7 +1324,8 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     `;
     collapseArrow.innerHTML = "▼";
 
-    leftContent.appendChild(badge);
+    leftContent.appendChild(numberBadge);
+    leftContent.appendChild(typeIcon);
     leftContent.appendChild(placeNameContainer);
     header.appendChild(leftContent);
     header.appendChild(collapseArrow);
@@ -984,7 +1346,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       margin-bottom: 16px;
     `;
 
-    if (this.data.placeId && this.data.photoReferences && this.data.photoReferences.length > 0) {
+    if (
+      this.data.placeId &&
+      this.data.photoReferences &&
+      this.data.photoReferences.length > 0
+    ) {
       const imagesGrid = document.createElement("div");
       imagesGrid.style.cssText = `
         display: grid;
@@ -1009,18 +1375,49 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         `;
 
         const image = document.createElement("img");
-        image.src = photoRef;
+        image.src = `/api/places/photos/${photoRef}?width=400`;
         image.style.cssText = `
           width: 100%;
           height: 100%;
           object-fit: cover;
-          transition: transform 0.2s ease;
+          transition: transform 0.2s ease, opacity 0.3s ease;
+          opacity: 0;
         `;
 
-        // Add hover effect and image popup
+        // Only show skeleton if image doesn't load quickly (indicating it's not cached)
+        let skeleton: HTMLElement | null = null;
+        let showSkeletonTimeout: number | null = null;
+
+        // Show skeleton after 50ms if image hasn't loaded (not cached)
+        showSkeletonTimeout = window.setTimeout(() => {
+          skeleton = createImageSkeleton("80px", "80px");
+          imageContainer.appendChild(skeleton);
+          showSkeletonTimeout = null;
+        }, 50);
+
+        // Image load success
+        image.addEventListener("load", () => {
+          // Cancel skeleton if image loads quickly (cached)
+          if (showSkeletonTimeout) {
+            clearTimeout(showSkeletonTimeout);
+            showSkeletonTimeout = null;
+          }
+          // Remove skeleton if it was shown
+          if (skeleton) {
+            skeleton.remove();
+          }
+          image.style.opacity = "1";
+        });
+
+        // Add hover effect and image popup (only after loaded)
         image.addEventListener("mouseenter", () => {
-          image.style.transform = "scale(1.05)";
-          this.showImagePopover(image, photoRef);
+          if (image.style.opacity === "1") {
+            image.style.transform = "scale(1.05)";
+            this.showImagePopover(
+              image,
+              `/api/places/photos/${photoRef}?width=600`
+            );
+          }
         });
 
         image.addEventListener("mouseleave", () => {
@@ -1028,8 +1425,17 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
           this.hideImagePopover();
         });
 
-        // Add loading placeholder
+        // Handle loading error
         image.addEventListener("error", () => {
+          // Cancel skeleton timeout
+          if (showSkeletonTimeout) {
+            clearTimeout(showSkeletonTimeout);
+            showSkeletonTimeout = null;
+          }
+          // Remove skeleton if it was shown
+          if (skeleton) {
+            skeleton.remove();
+          }
           imageContainer.style.background = "#e5e7eb";
           imageContainer.innerHTML = `
             <div style="
@@ -1053,8 +1459,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       imagesSection.appendChild(imagesGrid);
     }
 
-    // Description section - Google Places API description (only for found places)
-    if (this.data.placeId && this.data.description) {
+    if (
+      this.data.placeId &&
+      this.data.description &&
+      this.data.description !== ""
+    ) {
       const descriptionContainer = document.createElement("div");
       descriptionContainer.style.cssText = `
         background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
@@ -1063,25 +1472,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         padding: 16px;
         margin-bottom: 16px;
         box-shadow: 0 2px 8px rgba(14, 165, 233, 0.1);
-      `;
-
-      const descriptionLabel = document.createElement("h4");
-      descriptionLabel.style.cssText = `
-        color: #0c4a6e;
-        font-size: 15px;
-        font-weight: 700;
-        margin: 0 0 10px 0;
-        display: flex;
-        align-items: center;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      `;
-      descriptionLabel.innerHTML = `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 8px;">
-          <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4M9 11V9a3 3 0 1 1 6 0v2M9 11h6" stroke="currentColor" stroke-width="2"/>
-          <circle cx="12" cy="16" r="1" fill="currentColor"/>
-        </svg>
-        Google Places Description
       `;
 
       const description = document.createElement("p");
@@ -1095,21 +1485,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       `;
       description.textContent = `"${this.data.description}"`;
 
-      const sourceNote = document.createElement("div");
-      sourceNote.style.cssText = `
-        margin-top: 8px;
-        padding-top: 8px;
-        border-top: 1px solid #bae6fd;
-        font-size: 11px;
-        color: #0369a1;
-        text-align: right;
-        font-weight: 500;
-      `;
-      sourceNote.textContent = "Source: Google Places API";
-
-      descriptionContainer.appendChild(descriptionLabel);
       descriptionContainer.appendChild(description);
-      descriptionContainer.appendChild(sourceNote);
       imagesSection.appendChild(descriptionContainer);
     }
 
@@ -1305,7 +1681,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
             display: flex;
             align-items: center;
             justify-content: center;
-          ">
+          " title="Place found">
             <span style="color: white; font-size: 10px; font-weight: bold;">✓</span>
           </div>
         `;
@@ -1320,7 +1696,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
             display: flex;
             align-items: center;
             justify-content: center;
-          ">
+          " title="This is a custom name for the place. The original place data is preserved">
             <span style="color: white; font-size: 8px; font-weight: bold;">T</span>
           </div>
         `;
@@ -1336,7 +1712,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
             display: flex;
             align-items: center;
             justify-content: center;
-          ">
+          " title="This place could not be found">
             <span style="color: white; font-size: 10px; font-weight: bold;">!</span>
           </div>
         `;
@@ -1425,6 +1801,512 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     }
   }
 
+  // Show/hide loading spinner methods
+  protected showLoadingSpinner() {
+    if (this.loadingSpinner) {
+      this.loadingSpinner.style.display = "block";
+    }
+  }
+
+  protected hideLoadingSpinner() {
+    if (this.loadingSpinner) {
+      this.loadingSpinner.style.display = "none";
+    }
+  }
+
+  // Exit edit mode for all other elements
+  protected exitEditModeForOtherElements() {
+    // Find all place and hotel blocks in the editor
+    const editorElement = this.wrapper?.closest(".codex-editor");
+    if (!editorElement) return;
+
+    const allPlaceBlocks = editorElement.querySelectorAll(
+      ".place-block, .hotel-block"
+    );
+
+    allPlaceBlocks.forEach((block) => {
+      // Skip this current block
+      if (block === this.wrapper) return;
+
+      // Check if block is in edit mode
+      const editingInput = block.querySelector('input[data-editing="true"]');
+      if (editingInput) {
+        // Trigger escape to exit edit mode
+        const escapeEvent = new KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          cancelable: true,
+        });
+        editingInput.dispatchEvent(escapeEvent);
+      }
+    });
+  }
+
+  // Helper method to create action buttons with SVG icons loaded from files
+  protected async createActionButton(
+    iconPath: string,
+    tooltip: string,
+    onClick: () => void,
+    isActive: boolean,
+    buttonId?: string
+  ): Promise<HTMLElement> {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.style.cssText = `
+      background: ${isActive ? this.primaryColor : "transparent"};
+      color: ${isActive ? "white" : "#6b7280"};
+      border: 1px solid ${isActive ? this.primaryColor : "#e5e7eb"};
+      border-radius: ${BUTTON_STYLES.BORDER_RADIUS}px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: ${BUTTON_DIMENSIONS.WIDTH}px;
+      height: ${BUTTON_DIMENSIONS.HEIGHT}px;
+      transition: ${BUTTON_STYLES.TRANSITION};
+      box-shadow: ${BUTTON_STYLES.BOX_SHADOW};
+      flex-shrink: 0;
+    `;
+
+    // Create container for the SVG icon
+    const iconContainer = document.createElement("div");
+    iconContainer.style.cssText = `
+      width: ${ICON_DIMENSIONS.WIDTH}px; 
+      height: ${ICON_DIMENSIONS.HEIGHT}px; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+    `;
+
+    // Load SVG content from file
+    try {
+      const svgContent = await IconLoader.loadIcon(iconPath);
+      iconContainer.innerHTML = svgContent;
+
+      // Apply proper styling to the SVG
+      const svg = iconContainer.querySelector("svg");
+      if (svg) {
+        svg.style.width = `${ICON_DIMENSIONS.WIDTH}px`;
+        svg.style.height = `${ICON_DIMENSIONS.HEIGHT}px`;
+        svg.style.fill = "currentColor";
+      }
+    } catch (error) {
+      console.error(`Failed to load icon from ${iconPath}:`, error);
+      // Fallback to a simple dot if icon fails to load
+      iconContainer.innerHTML = `<div style="width: 6px; height: 6px; background: currentColor; border-radius: 50%;"></div>`;
+    }
+
+    button.appendChild(iconContainer);
+    button.title = tooltip;
+
+    // Add data attribute for identification if buttonId is provided
+    if (buttonId) {
+      button.setAttribute("data-button-id", buttonId);
+    }
+
+    // Event listeners
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
+      onClick();
+    });
+
+    button.addEventListener("mouseenter", () => {
+      if (!isActive) {
+        button.style.background = "#f3f4f6";
+        button.style.color = this.primaryColor;
+        button.style.borderColor = this.primaryColor;
+        button.style.transform = `scale(${BUTTON_STYLES.SCALE_HOVER})`;
+        button.style.boxShadow = BUTTON_STYLES.HOVER_BOX_SHADOW;
+      } else {
+        button.style.transform = `scale(${BUTTON_STYLES.SCALE_HOVER})`;
+        button.style.boxShadow = BUTTON_STYLES.ACTIVE_HOVER_BOX_SHADOW;
+      }
+    });
+
+    button.addEventListener("mouseleave", () => {
+      if (!isActive) {
+        button.style.background = "transparent";
+        button.style.color = "#6b7280";
+        button.style.borderColor = "#e5e7eb";
+        button.style.transform = `scale(${BUTTON_STYLES.SCALE_NORMAL})`;
+        button.style.boxShadow = BUTTON_STYLES.BOX_SHADOW;
+      } else {
+        button.style.transform = `scale(${BUTTON_STYLES.SCALE_NORMAL})`;
+        button.style.boxShadow = BUTTON_STYLES.BOX_SHADOW;
+      }
+    });
+
+    return button;
+  }
+
+  // Create action buttons in the correct order to avoid inconsistency
+  protected async createActionButtonsInOrder(
+    buttonsContainer: HTMLElement
+  ): Promise<void> {
+    // Build button configurations using array construction
+    const buttonConfigs = [
+      // Conditionally include suggest similar place button (only for places, not hotels)
+      ...(this.autocompleteType === "place"
+        ? [
+            {
+              iconPath: IconPaths.LIGHTBULB,
+              tooltip: "Suggest similar place",
+              onClick: () => this.handleSuggestSimilar(),
+              isActive: false,
+              buttonId: "suggest-similar",
+            },
+          ]
+        : []),
+
+      // Hide in map toggle button
+      {
+        iconPath: IconPaths.BAN,
+        tooltip: this.data.hideInMap ? "Show in map" : "Hide in map",
+        onClick: () => this.handleToggleHideInMap(),
+        isActive: this.data.hideInMap || false,
+        buttonId: "hide-in-map",
+      },
+
+      // Define as day finish toggle button
+      {
+        iconPath: IconPaths.FLAG,
+        tooltip: this.data.isDayFinish
+          ? "Remove day finish"
+          : "Define as day finish",
+        onClick: () => this.handleToggleDayFinish(),
+        isActive: this.data.isDayFinish || false,
+        buttonId: "day-finish",
+      },
+
+      // Delete button
+      {
+        iconPath: IconPaths.TRASH_BIN,
+        tooltip: `Delete this ${this.blockType.toLowerCase()}`,
+        onClick: () => this.handleDeleteBlock(),
+        isActive: false,
+        buttonId: "delete",
+      },
+    ];
+
+    // Create all buttons and append them using Promise.all for better performance
+    const buttons = await Promise.all(
+      buttonConfigs.map((config) =>
+        this.createActionButton(
+          config.iconPath,
+          config.tooltip,
+          config.onClick,
+          config.isActive,
+          config.buttonId
+        )
+      )
+    );
+
+    // Append all buttons to the container
+    buttons.forEach((button) => buttonsContainer.appendChild(button));
+  }
+
+  // Update a specific action button's state without re-rendering the entire component
+  protected updateActionButtonState(buttonId: string, isActive: boolean): void {
+    if (!this.wrapper) {
+      console.warn(
+        `${this.blockType}: No wrapper found when updating button ${buttonId}`
+      );
+      return;
+    }
+
+    const button = this.wrapper.querySelector(
+      `[data-button-id="${buttonId}"]`
+    ) as HTMLElement;
+    if (!button) {
+      console.warn(
+        `${this.blockType}: Button ${buttonId} not found when updating state`
+      );
+      return;
+    }
+
+    console.log(
+      `${this.blockType}: Updating button ${buttonId} to ${
+        isActive ? "active" : "inactive"
+      } for ${this.data.name}`
+    );
+
+    // Update button appearance
+    button.style.background = isActive ? this.primaryColor : "transparent";
+    button.style.color = isActive ? "white" : "#6b7280";
+    button.style.borderColor = isActive ? this.primaryColor : "#e5e7eb";
+
+    // Update tooltip based on button type and state
+    if (buttonId === "day-finish") {
+      button.title = isActive ? "Remove day finish" : "Define as day finish";
+    } else if (buttonId === "hide-in-map") {
+      button.title = isActive ? "Show in map" : "Hide in map";
+    }
+  }
+
+  // Action button handlers
+  protected handleDeleteBlock() {
+    // Show in-line delete alert instead of browser confirm
+    this.showDeleteAlert();
+  }
+
+  protected showDeleteAlert() {
+    if (!this.wrapper) return;
+
+    // Remove any existing alert
+    this.hideDeleteAlert();
+
+    // Create alert container
+    const alertContainer = document.createElement("div");
+    alertContainer.className = "delete-alert";
+    alertContainer.style.cssText = `
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      animation: slideDown 0.2s ease-out;
+    `;
+
+    // Add CSS animation if not already present
+    if (!document.getElementById("delete-alert-styles")) {
+      const style = document.createElement("style");
+      style.id = "delete-alert-styles";
+      style.textContent = `
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    // Alert content
+    const alertContent = document.createElement("div");
+    alertContent.style.cssText =
+      "display: flex; align-items: center; gap: 8px;";
+
+    // Warning icon
+    const warningIcon = document.createElement("div");
+    warningIcon.style.cssText = "color: #dc2626; flex-shrink: 0;";
+    warningIcon.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+
+    // Alert text
+    const alertText = document.createElement("span");
+    alertText.style.cssText =
+      "color: #991b1b; font-size: 14px; font-weight: 500;";
+    alertText.textContent = `Delete this ${this.blockType.toLowerCase()}?`;
+
+    alertContent.appendChild(warningIcon);
+    alertContent.appendChild(alertText);
+
+    // Buttons container
+    const buttonsContainer = document.createElement("div");
+    buttonsContainer.style.cssText =
+      "display: flex; gap: 8px; align-items: center;";
+
+    // Confirm delete button
+    const confirmButton = document.createElement("button");
+    confirmButton.style.cssText = `
+      background: #dc2626;
+      color: white;
+      border: none;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    `;
+    confirmButton.textContent = "Delete";
+
+    // Cancel button
+    const cancelButton = document.createElement("button");
+    cancelButton.style.cssText = `
+      background: transparent;
+      color: #6b7280;
+      border: 1px solid #d1d5db;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    `;
+    cancelButton.textContent = "Cancel";
+
+    // Event listeners
+    confirmButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.confirmDeleteBlock();
+    });
+
+    confirmButton.addEventListener("mouseenter", () => {
+      confirmButton.style.background = "#b91c1c";
+      confirmButton.style.transform = "scale(1.05)";
+    });
+
+    confirmButton.addEventListener("mouseleave", () => {
+      confirmButton.style.background = "#dc2626";
+      confirmButton.style.transform = "scale(1)";
+    });
+
+    cancelButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.hideDeleteAlert();
+    });
+
+    cancelButton.addEventListener("mouseenter", () => {
+      cancelButton.style.background = "#f9fafb";
+      cancelButton.style.borderColor = "#9ca3af";
+      cancelButton.style.transform = "scale(1.05)";
+    });
+
+    cancelButton.addEventListener("mouseleave", () => {
+      cancelButton.style.background = "transparent";
+      cancelButton.style.borderColor = "#d1d5db";
+      cancelButton.style.transform = "scale(1)";
+    });
+
+    buttonsContainer.appendChild(confirmButton);
+    buttonsContainer.appendChild(cancelButton);
+
+    alertContainer.appendChild(alertContent);
+    alertContainer.appendChild(buttonsContainer);
+
+    // Add to wrapper
+    this.wrapper.appendChild(alertContainer);
+
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      this.hideDeleteAlert();
+    }, 5000);
+  }
+
+  protected hideDeleteAlert() {
+    if (!this.wrapper) return;
+    const existingAlert = this.wrapper.querySelector(".delete-alert");
+    if (existingAlert) {
+      existingAlert.remove();
+    }
+  }
+
+  protected confirmDeleteBlock() {
+    this.hideDeleteAlert();
+
+    // Find the parent Editor.js block and get its index for proper deletion
+    const editorBlock = this.wrapper?.closest(".ce-block");
+    if (editorBlock) {
+      // Dispatch a custom deletion event that the ItineraryEditor can handle
+      // This will use the Editor.js blocks.delete(index) API properly
+      const deleteEvent = new CustomEvent("block:requestDelete", {
+        bubbles: true,
+        detail: {
+          blockElement: editorBlock,
+          blockType: this.blockType,
+          blockName: this.data.name,
+        },
+      });
+
+      // Let the event bubble up to ItineraryEditor which has access to the editor instance
+      editorBlock.dispatchEvent(deleteEvent);
+
+      console.log(
+        `🗑️ ${this.blockType}: Requested deletion for block ${this.data.name}`
+      );
+    }
+  }
+
+  protected handleToggleDayFinish() {
+    const wasFinish = this.data.isDayFinish;
+    this.data.isDayFinish = !this.data.isDayFinish;
+
+    // If this place is now marked as finish, uncheck all other places
+    if (this.data.isDayFinish && !wasFinish) {
+      this.uncheckAllOtherDayFinishPlaces();
+    }
+
+    // Re-render the collapsed view to show the updated button state
+    if (!this.isExpanded) {
+      this.renderCollapsed(false);
+    }
+
+    // Trigger editor change event
+    if (this.wrapper) {
+      const changeEvent = new Event("input", { bubbles: true });
+      this.wrapper.dispatchEvent(changeEvent);
+    }
+
+    console.log(
+      `🏁 ${this.blockType}: Day finish toggled to ${this.data.isDayFinish} for ${this.data.name}`
+    );
+  }
+
+  protected uncheckAllOtherDayFinishPlaces() {
+    // Find all place and hotel blocks in the editor
+    const editorElement = this.wrapper?.closest(".codex-editor");
+    if (!editorElement) return;
+
+    const allPlaceBlocks = editorElement.querySelectorAll(
+      ".place-block, .hotel-block"
+    );
+
+    allPlaceBlocks.forEach((block) => {
+      // Skip this current block
+      if (block === this.wrapper) return;
+
+      // Dispatch a custom event to tell other blocks to uncheck their day finish
+      // This will directly update their data, causing them to re-render with correct state
+      const uncheckEvent = new CustomEvent("place:uncheckDayFinish", {
+        detail: { excludeUid: this.data.uid },
+        bubbles: true,
+      });
+      block.dispatchEvent(uncheckEvent);
+    });
+
+    console.log(
+      `🏁 ${this.blockType}: Unchecked day finish for all other places when setting ${this.data.name} as finish`
+    );
+  }
+
+  protected handleToggleHideInMap() {
+    this.data.hideInMap = !this.data.hideInMap;
+
+    // Re-render the collapsed view to show the updated button state
+    if (!this.isExpanded) {
+      this.renderCollapsed(false);
+    }
+
+    // Trigger editor change event
+    if (this.wrapper) {
+      const changeEvent = new Event("input", { bubbles: true });
+      this.wrapper.dispatchEvent(changeEvent);
+    }
+
+    console.log(
+      `👁️ ${this.blockType}: Hide in map toggled to ${this.data.hideInMap} for ${this.data.name}`
+    );
+  }
+
+  protected async handleSuggestSimilar() {
+    if (this.autocompleteType !== "place") return; // Only for places
+
+    console.log(
+      `💡 ${this.blockType}: Suggesting similar places for ${this.data.name}`
+    );
+
+    // TODO: Implement similar place suggestion logic
+    // This could integrate with Google Places API to find similar places
+    // For now, just show a placeholder
+    alert(`Feature coming soon: Suggest similar places to ${this.data.name}`);
+  }
+
   protected emitPlaceSelectionEvent(isSelected: boolean) {
     if (!this.data.uid) return;
 
@@ -1483,6 +2365,8 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       status: this.data.status,
       drivingTimeFromPrevious: this.data.drivingTimeFromPrevious,
       drivingDistanceFromPrevious: this.data.drivingDistanceFromPrevious,
+      isDayFinish: this.data.isDayFinish,
+      hideInMap: this.data.hideInMap,
     };
   }
 
@@ -1497,11 +2381,15 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       this.boundsChangeCleanup = null;
     }
 
-    // Cleanup driving time listener
+    // Cleanup event listeners
     if (typeof window !== "undefined") {
       window.removeEventListener(
         "editor:updateDrivingTimes",
         this.handleDrivingTimeUpdate
+      );
+      window.removeEventListener(
+        "editor:updatePlaceNumbers",
+        this.handlePlaceNumberingUpdate
       );
     }
 
@@ -1522,6 +2410,8 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       description: false,
       thumbnailUrl: false,
       status: false,
+      isDayFinish: false,
+      hideInMap: false,
     };
   }
 }

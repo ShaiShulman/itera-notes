@@ -4,7 +4,12 @@
  * for services to use caching without exposing cache implementation details
  */
 
-import { googleAPICache, CACHE_TTL, generateDirectionsKey, generatePlacesKey } from "./cache";
+import {
+  googleAPICache,
+  CACHE_TTL,
+  generateDirectionsKey,
+  generatePlacesKey,
+} from "./cache";
 
 /**
  * Cache wrapper for directions API calls
@@ -15,8 +20,8 @@ export async function withDirectionsCache<T>(
   apiCall: () => Promise<T>
 ): Promise<T> {
   const key = generateDirectionsKey(places, mode);
-  const route = places.map(p => p.name || `${p.lat},${p.lng}`).join(" → ");
-  
+  const route = places.map((p) => p.name || `${p.lat},${p.lng}`).join(" → ");
+
   // Check cache first
   const cached = googleAPICache.get<T>(key);
   if (cached !== undefined) {
@@ -39,7 +44,7 @@ export async function withPlacesSearchCache<T>(
   apiCall: () => Promise<T>
 ): Promise<T> {
   const key = generatePlacesKey("search", query);
-  
+
   // Check cache first
   const cached = googleAPICache.get<T>(key);
   if (cached !== undefined) {
@@ -62,7 +67,7 @@ export async function withPlaceDetailsCache<T>(
   apiCall: () => Promise<T>
 ): Promise<T> {
   const key = generatePlacesKey("details", placeId);
-  
+
   // Check cache first
   const cached = googleAPICache.get<T>(key);
   if (cached !== undefined) {
@@ -74,5 +79,39 @@ export async function withPlaceDetailsCache<T>(
   console.log(`🏢 PLACE DETAILS (API): ${placeId}`);
   const result = await apiCall();
   googleAPICache.set(key, result, CACHE_TTL.PLACES_DETAILS);
+  return result;
+}
+
+/**
+ * Cache wrapper for place photos API calls
+ */
+export async function withPlacePhotosCache(
+  photoReference: string,
+  maxWidth: number,
+  apiCall: () => Promise<string>
+): Promise<string> {
+  const key = generatePlacesKey("photos", photoReference, maxWidth.toString());
+
+  // Check cache first
+  const cached = googleAPICache.get<string>(key);
+  if (cached !== undefined) {
+    console.log(
+      `📸 PLACE PHOTO (CACHED): ${photoReference.slice(
+        0,
+        5
+      )}...${photoReference.slice(-5)}} (${maxWidth}px)`
+    );
+    return cached;
+  }
+
+  // Call API and cache result
+  console.log(
+    `📸 PLACE PHOTO (CACHED): ${photoReference.slice(
+      0,
+      5
+    )}...${photoReference.slice(-5)}} (${maxWidth}px)`
+  );
+  const result = await apiCall();
+  googleAPICache.set(key, result, CACHE_TTL.PLACES_PHOTOS);
   return result;
 }
