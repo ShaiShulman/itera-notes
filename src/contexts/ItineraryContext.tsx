@@ -460,7 +460,6 @@ interface ItineraryContextValue {
     fromIndex: number,
     toIndex: number
   ) => void;
-  clearItinerary: () => void;
   markSaved: () => void;
   markDirty: () => void;
   setSelectedPlace: (place: { uid: string; dayIndex: number } | null) => void;
@@ -703,11 +702,6 @@ export function ItineraryProvider({ children }: ItineraryProviderProps) {
     []
   );
 
-  const clearItinerary = useCallback(() => {
-    dispatch({ type: "CLEAR_ITINERARY" });
-    clearItineraryFromStorage();
-  }, []);
-
   const markSaved = useCallback(() => {
     dispatch({ type: "MARK_SAVED" });
   }, []);
@@ -741,24 +735,6 @@ export function ItineraryProvider({ children }: ItineraryProviderProps) {
     [state.currentItinerary]
   );
 
-  // Save to localStorage whenever state changes (debounced)
-  useEffect(() => {
-    // Skip saving during initial load or when there's no meaningful data
-    if (!state.lastUpdated) {
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      saveItineraryToStorage(
-        state.currentItinerary,
-        state.editorData,
-        state.lastUpdated
-      );
-    }, 500); // Debounce saves by 500ms
-
-    return () => clearTimeout(timeoutId);
-  }, [state.currentItinerary, state.editorData, state.lastUpdated]);
-
   const value: ItineraryContextValue = {
     state,
     setLoading,
@@ -775,7 +751,6 @@ export function ItineraryProvider({ children }: ItineraryProviderProps) {
     addPlace,
     removePlace,
     reorderPlaces,
-    clearItinerary,
     markSaved,
     markDirty,
     setSelectedPlace,
