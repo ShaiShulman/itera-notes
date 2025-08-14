@@ -12,7 +12,7 @@ import {
   DirectionsResponse,
 } from "@/services/google/directions";
 import { useItinerary } from "@/contexts/ItineraryContext";
-import { calculateDirectionsForDays } from "@/features/directions/generator";
+import { calculateDirectionsForDaysWithCrossDayConnections } from "@/features/directions/generator";
 import { PlaceLocation } from "@/services/openai/itinerary";
 import {
   calculateDayBounds,
@@ -159,8 +159,14 @@ async function extractPlacesDataFromEditor(editorRef: any): Promise<{
             name: placeData.name,
           };
 
+          // Add type information to the place data for cross-day direction logic
+          const enhancedPlaceData = {
+            ...placeData,
+            __type: block.type as "place" | "hotel"
+          };
+
           placesByDay[currentDayIndex].push(placeCoordinate);
-          allPlaces.push(placeData);
+          allPlaces.push(enhancedPlaceData);
         }
       }
     }
@@ -497,9 +503,9 @@ export default function ItineraryEditor({
         return { directions: [], updatedPlaces: [] };
       }
 
-      // Use shared directions calculation logic
+      // Use shared directions calculation logic with cross-day connections
       const { directions, drivingTimesByUid } =
-        await calculateDirectionsForDays(placesByDay);
+        await calculateDirectionsForDaysWithCrossDayConnections(placesByDay, allPlaces);
 
       // Update place blocks with driving times (editor-specific functionality)
       await updatePlaceBlocksWithDrivingTimes(editorRef, drivingTimesByUid);
