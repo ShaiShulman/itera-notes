@@ -6,6 +6,7 @@ import type {
   ItineraryEditorProps,
   EditorData,
   PlaceBlockData,
+  BasePlaceBlockData,
 } from "../types";
 import {
   PlaceCoordinate,
@@ -137,7 +138,7 @@ async function extractPlacesDataFromEditor(editorRef: any): Promise<{
     const blocks = outputData.blocks || [];
 
     const placesByDay: { [dayIndex: number]: PlaceCoordinate[] } = {};
-    const allPlaces: PlaceBlockData[] = [];
+    const allPlaces: BasePlaceBlockData[] = [];
     let currentDayIndex = -1;
 
     for (const block of blocks) {
@@ -162,7 +163,7 @@ async function extractPlacesDataFromEditor(editorRef: any): Promise<{
           // Add type information to the place data for cross-day direction logic
           const enhancedPlaceData = {
             ...placeData,
-            __type: block.type as "place" | "hotel"
+            __type: block.type as "place" | "hotel",
           };
 
           placesByDay[currentDayIndex].push(placeCoordinate);
@@ -268,7 +269,7 @@ export default function ItineraryEditor({
   const holderRef = useRef<HTMLDivElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { setSelectedPlace, state, updateDay, setEditorData } = useItinerary();
+  const { setSelectedPlace, state, updateDay } = useItinerary();
   const { selectedPlace } = state;
 
   // Track place/hotel block structure for numbering updates
@@ -505,7 +506,10 @@ export default function ItineraryEditor({
 
       // Use shared directions calculation logic with cross-day connections
       const { directions, drivingTimesByUid } =
-        await calculateDirectionsForDaysWithCrossDayConnections(placesByDay, allPlaces);
+        await calculateDirectionsForDaysWithCrossDayConnections(
+          placesByDay,
+          allPlaces
+        );
 
       // Update place blocks with driving times (editor-specific functionality)
       await updatePlaceBlocksWithDrivingTimes(editorRef, drivingTimesByUid);
@@ -573,7 +577,7 @@ export default function ItineraryEditor({
           },
           onChange: async () => {
             console.log("ItineraryEditor: Content changed");
-            if (editorRef.current) {
+            if (onChange && editorRef.current) {
               try {
                 if (
                   !editorRef.current ||
@@ -601,12 +605,9 @@ export default function ItineraryEditor({
                 // This prevents deleted places from being re-added
                 setTimeout(() => {
                   syncEditorDeletionsToContext(outputData);
-                  // Clear sync flag after context sync completes
-                  syncInProgressRef.current = false;
                 }, 100);
               } catch (error) {
                 console.error("ItineraryEditor: Error saving data:", error);
-                syncInProgressRef.current = false;
               }
             }
           },
@@ -779,12 +780,6 @@ export default function ItineraryEditor({
   useEffect(() => {
     if (!isReady || !state.currentItinerary) return;
 
-    // Skip if we're in the middle of a sync operation to prevent loops
-    if (syncInProgressRef.current) {
-      console.log("📝 Skipping context-to-editor sync - sync in progress");
-      return;
-    }
-
     // Get current editor data to compare
     if (editorRef.current) {
       editorRef.current
@@ -900,7 +895,7 @@ export default function ItineraryEditor({
           console.error("Error comparing editor data with context:", error);
         });
     }
-  }, [state.currentItinerary, isReady, setEditorData]);
+  }, [state.currentItinerary, isReady]);
 
   // Expose refresh directions function to parent component
   useEffect(() => {
