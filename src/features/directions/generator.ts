@@ -11,6 +11,55 @@ import {
   extractDrivingTimes,
 } from "@/features/editor/actions/directions";
 import { getDayColor } from "@/features/map/utils/colors";
+import { PlaceBlockData, HotelBlockData } from "@/features/editor/types";
+
+/**
+ * Find the ending location for a given day based on business rules:
+ * 1. If any place/hotel has isDayFinish: true, use that location
+ * 2. Otherwise, use the last place (excluding hotels) from that day
+ */
+function findDayEndingLocation(
+  places: PlaceCoordinate[],
+  allPlacesData: (PlaceBlockData | HotelBlockData)[]
+): PlaceCoordinate | null {
+  if (places.length === 0) return null;
+
+  // Find places data that correspond to the current day's places
+  const dayPlacesData = allPlacesData.filter(placeData => 
+    places.some(place => place.uid === placeData.uid)
+  );
+
+  // Rule 1: Look for a place/hotel with isDayFinish: true
+  const dayFinishPlace = dayPlacesData.find(placeData => placeData.isDayFinish === true);
+  if (dayFinishPlace) {
+    const dayFinishCoordinate = places.find(place => place.uid === dayFinishPlace.uid);
+    if (dayFinishCoordinate) {
+      console.log(`🏁 Day ending location: ${dayFinishCoordinate.name} (marked as day finish)`);
+      return dayFinishCoordinate;
+    }
+  }
+
+  // Rule 2: Use the last place (excluding hotels) from that day
+  // Filter to only places (not hotels) by checking the __type property
+  const onlyPlaces = dayPlacesData.filter(placeData => 
+    (placeData as any).__type !== "hotel"
+  );
+  
+  if (onlyPlaces.length > 0) {
+    // Get the last place from the filtered list
+    const lastPlace = onlyPlaces[onlyPlaces.length - 1];
+    const lastPlaceCoordinate = places.find(place => place.uid === lastPlace.uid);
+    if (lastPlaceCoordinate) {
+      console.log(`🏁 Day ending location: ${lastPlaceCoordinate.name} (last place)`);
+      return lastPlaceCoordinate;
+    }
+  }
+
+  // Fallback: if no places found, use the last coordinate regardless of type
+  const lastCoordinate = places[places.length - 1];
+  console.log(`🏁 Day ending location: ${lastCoordinate.name} (fallback - last coordinate)`);
+  return lastCoordinate;
+}
 
 /**
  * Extract places from GeneratedItinerary grouped by day
@@ -53,7 +102,137 @@ export async function extractPlacesFromItinerary(itinerary: GeneratedItinerary):
 }
 
 /**
- * Calculate directions for multiple days
+ * Calculate directions for multiple days with cross-day connections
+ * This version is specifically for editor context where we have place metadata
+ */
+export async function calculateDirectionsForDaysWithCrossDayConnections(
+  placesByDay: { [dayIndex: number]: PlaceCoordinate[] },
+  allPlacesData: (PlaceBlockData | HotelBlockData)[]
+): Promise<{
+  directions: DirectionsData[];
+  drivingTimesByUid: { [uid: string]: { time: number; distance: number } };
+}> {
+  const directionsResults: DirectionsData[] = [];
+  const drivingTimesByUid: {
+    [uid: string]: { time: number; distance: number };
+  } = {};
+
+  const dayIndices = Object.keys(placesByDay).map(k => parseInt(k)).sort((a, b) => a - b);
+  
+  for (let i = 0; i < dayIndices.length; i++) {
+    const dayIndex = dayIndices[i];
+    const dayNumber = dayIndex + 1;
+    let places = placesByDay[dayIndex];
+
+    if (places.length === 0) {
+      console.log(`🚗 Day ${dayNumber}: No places, skipping directions`);
+      continue;
+    }
+
+    // For days after the first, prepend the ending location from previous day
+    if (i > 0) {
+      const previousDayIndex = dayIndices[i - 1];
+      const previousDayPlaces = placesByDay[previousDayIndex];
+      
+      if (previousDayPlaces.length > 0) {
+        const previousDayEndingLocation = findDayEndingLocation(previousDayPlaces, allPlacesData);
+        
+        if (previousDayEndingLocation) {
+          // Create a cross-day connection by prepending the previous day's ending location
+          places = [previousDayEndingLocation, ...places];
+          console.log(`🔗 Day ${dayNumber}: Added cross-day connection from ${previousDayEndingLocation.name}`);
+        }
+      }
+    }
+
+    if (places.length < 2) {
+      console.log(
+        `🚗 Day ${dayNumber}: Only ${places.length} place(s) after cross-day logic, skipping directions`
+      );
+      continue;
+    }
+
+    console.log(
+      `🚗 Day ${dayNumber}: Calculating directions for ${places.length} places (${i > 0 ? 'including cross-day connection' : 'first day'})`
+    );
+
+    try {
+      // Call directions API for this day
+      const directionsResponse: DirectionsResponse = await calculateDirections(places);
+
+      // Check if this is a fallback straight-line response
+      if (directionsResponse.isFallbackStraightLine) {
+        console.warn(
+          `⚠️ Day ${dayNumber}: No driving route found, using straight-line fallback`
+        );
+      }
+
+      // Extract driving times and distances
+      const { times, distances } = await extractDrivingTimes(directionsResponse, places);
+
+      // Store driving times by UID (skip the first place for days after the first, as it's from previous day)
+      const startIndex = i > 0 ? 1 : 0; // Skip cross-day connection point
+      places.slice(startIndex).forEach((place, index) => {
+        if (place.uid) {
+          const actualIndex = index + startIndex;
+          drivingTimesByUid[place.uid] = {
+            time: times[actualIndex] || 0,
+            distance: distances[actualIndex] || 0,
+          };
+        }
+      });
+
+      // Validate dayIndex is valid (non-negative)
+      if (dayIndex < 0) {
+        console.warn(`⚠️ Skipping directions for invalid dayIndex: ${dayIndex}`);
+        continue;
+      }
+      
+      const dayColor = getDayColor(dayIndex);
+      
+      // Validate color is valid
+      if (!dayColor) {
+        console.warn(`⚠️ Skipping directions for dayIndex ${dayIndex} - no color available`);
+        continue;
+      }
+      
+      directionsResults.push({
+        dayIndex,
+        color: dayColor,
+        directionsResult: directionsResponse,
+      });
+
+      const routeType = directionsResponse.isFallbackStraightLine
+        ? "straight-line fallback"
+        : "driving route";
+      console.log(
+        `✅ Day ${dayNumber}: ${routeType} calculated successfully with cross-day logic`
+      );
+    } catch (error) {
+      console.error(
+        `❌ Day ${dayNumber}: Error calculating directions:`,
+        error
+      );
+    }
+  }
+
+  const fallbackCount = directionsResults.filter(
+    (r) => r.directionsResult.isFallbackStraightLine
+  ).length;
+  const realRoutesCount = directionsResults.length - fallbackCount;
+
+  console.log(
+    `✅ Cross-day directions calculation completed - ${realRoutesCount} driving routes, ${fallbackCount} straight-line fallbacks`
+  );
+
+  return {
+    directions: directionsResults,
+    drivingTimesByUid,
+  };
+}
+
+/**
+ * Calculate directions for multiple days (original version for backward compatibility)
  */
 export async function calculateDirectionsForDays(placesByDay: {
   [dayIndex: number]: PlaceCoordinate[];
