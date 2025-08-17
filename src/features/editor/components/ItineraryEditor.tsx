@@ -120,6 +120,12 @@ function findInsertionPointAfterDay(
   return nextDayIndex;
 }
 
+// Helper function to find block index by ID
+function findBlockIndexById(editorData: EditorData, blockId: string): number {
+  const blocks = editorData.blocks || [];
+  return blocks.findIndex(block => block.id === blockId);
+}
+
 // Helper function to extract places data from editor grouped by day
 async function extractPlacesDataFromEditor(editorRef: any): Promise<{
   placesByDay: { [dayIndex: number]: PlaceCoordinate[] };
@@ -690,10 +696,12 @@ export default function ItineraryEditor({
             };
 
             // Add event listener for block deletion requests
-            const handleDeleteBlockRequest = (event: CustomEvent) => {
-              const { blockElement, blockType, blockName } = event.detail;
+            const handleDeleteBlockRequest = async (event: CustomEvent) => {
+              const { blockElement, blockType, blockName, linkedParagraphId } = event.detail;
               console.log(
-                `ItineraryEditor: Request to delete ${blockType} block: ${blockName}`
+                `🗑️ DELETE REQUEST: ${blockType} "${blockName}"${
+                  linkedParagraphId ? ` (linked: ${linkedParagraphId.slice(0,8)})` : " (no link)"
+                }`
               );
 
               if (editorRef.current?.blocks && blockElement) {
@@ -714,7 +722,39 @@ export default function ItineraryEditor({
                       `ItineraryEditor: Deleting block at index ${blockIndex} (${blockType}: ${blockName})`
                     );
 
-                    // Use Editor.js blocks.delete() API to properly remove the block
+                    // If there's a linked paragraph, delete it first
+                    if (linkedParagraphId) {
+                      try {
+                        const outputData = await editorRef.current.save();
+                        const paragraphIndex = findBlockIndexById(outputData, linkedParagraphId);
+                        
+                        if (paragraphIndex >= 0) {
+                          console.log(
+                            `🗑️ DELETING LINKED PARAGRAPH at index ${paragraphIndex}`
+                          );
+                          editorRef.current.blocks.delete(paragraphIndex);
+                          
+                          // Adjust the place block index if paragraph was before it
+                          if (paragraphIndex < blockIndex) {
+                            blockIndex--;
+                            console.log(
+                              `ItineraryEditor: Adjusted place block index to ${blockIndex} after paragraph deletion`
+                            );
+                          }
+                        } else {
+                          console.warn(
+                            `ItineraryEditor: Could not find linked paragraph with ID: ${linkedParagraphId}`
+                          );
+                        }
+                      } catch (error) {
+                        console.warn(
+                          "ItineraryEditor: Could not delete linked paragraph:",
+                          error
+                        );
+                      }
+                    }
+
+                    // Use Editor.js blocks.delete() API to properly remove the place block
                     editorRef.current.blocks.delete(blockIndex);
 
                     // Trigger place numbering update after deletion
@@ -723,7 +763,9 @@ export default function ItineraryEditor({
                     }, 50);
 
                     console.log(
-                      `ItineraryEditor: Successfully deleted ${blockType} block`
+                      `ItineraryEditor: Successfully deleted ${blockType} block${
+                        linkedParagraphId ? " and its linked paragraph" : ""
+                      }`
                     );
                   } else {
                     console.warn(
@@ -745,7 +787,7 @@ export default function ItineraryEditor({
               );
               holderRef.current.addEventListener(
                 "block:requestDelete",
-                handleDeleteBlockRequest as EventListener
+                handleDeleteBlockRequest as any
               );
             }
           },

@@ -56,3 +56,7 @@ logs/
 # database
 prisma/prisma/dev.db
 prisma/migrations/
+
+# research folders
+research/results
+research/data

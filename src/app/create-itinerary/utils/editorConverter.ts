@@ -8,16 +8,23 @@ import { EditorData, EditorBlockData } from "@/features/editor/types";
 /**
  * Converts a GeneratedItinerary from OpenAI to Editor.js format
  * @param itinerary - The generated itinerary from OpenAI
+ * @param isGenerated - Whether this is a newly generated itinerary (enables place-paragraph linking)
  * @returns EditorData - The data structure expected by Editor.js
  */
 export function convertItineraryToEditorData(
-  itinerary: GeneratedItinerary
+  itinerary: GeneratedItinerary,
+  isGenerated: boolean = false
 ): EditorData {
+  console.log(`🔄 CONVERTER CALLED: isGenerated=${isGenerated}, title="${itinerary.title}"`);
+  console.log(`🔄 CONVERTER: Processing ${itinerary.days.length} days`);
+  if (itinerary.days[0]?.places[0]) {
+    console.log(`🔄 CONVERTER: First place sample:`, itinerary.days[0].places[0]);
+  }
   const blocks: EditorBlockData[] = [];
 
   // Add title block
   blocks.push({
-    id: generateBlockId(),
+    id: crypto.randomUUID(),
     type: "header",
     data: {
       text: itinerary.title,
@@ -27,7 +34,7 @@ export function convertItineraryToEditorData(
 
   // Add destination and summary info
   blocks.push({
-    id: generateBlockId(),
+    id: crypto.randomUUID(),
     type: "paragraph",
     data: {
       text: `${itinerary.totalDays}-day trip to ${itinerary.destination}`,
@@ -38,7 +45,7 @@ export function convertItineraryToEditorData(
   for (const day of itinerary.days) {
     // Add day block
     const dayBlock: EditorBlockData = {
-      id: generateBlockId(),
+      id: crypto.randomUUID(),
       type: "day",
       data: {
         dayNumber: day.dayNumber,
@@ -46,7 +53,7 @@ export function convertItineraryToEditorData(
         title: day.title,
         description: day.description,
         places: day.places.map((place, index) => ({
-          id: generatePlaceId(day.dayNumber, index),
+          id: crypto.randomUUID(),
           uid: `place_${day.dayNumber}_${index}`,
           name: place.name,
           lat: place.lat,
@@ -70,7 +77,7 @@ export function convertItineraryToEditorData(
     blocks.push(dayBlock);
     if (day.description) {
       blocks.push({
-        id: generateBlockId(),
+        id: crypto.randomUUID(),
         type: "paragraph",
         data: { text: day.description },
       });
@@ -79,13 +86,25 @@ export function convertItineraryToEditorData(
     // Add individual place blocks for each place in the day
     for (let i = 0; i < day.places.length; i++) {
       const place = day.places[i];
+      
+      // Generate paragraph block ID if this is a generated itinerary and place has paragraph
+      console.log(`🔍 CONVERTER: "${place.name}" - paragraph: "${place.paragraph || 'NONE'}", isGenerated: ${isGenerated}`);
+      let paragraphBlockId = "";
+      if (place.paragraph && place.paragraph.trim() && isGenerated) {
+        paragraphBlockId = crypto.randomUUID();
+        console.log(`🔗 LINKED: "${place.name}" → paragraph ${paragraphBlockId.slice(0,8)}`);
+      }
+      
+      const placeBlockId = crypto.randomUUID();
       const placeBlock: EditorBlockData = {
-        id: generatePlaceId(day.dayNumber, i),
+        id: placeBlockId,
         type: "place",
         data: {
-          id: generatePlaceId(day.dayNumber, i),
+          id: placeBlockId,
           uid: `place_${day.dayNumber}_${i}`,
           name: place.name,
+          shortName: place.shortName || "",
+          linkedParagraphId: paragraphBlockId,
           lat: place.lat,
           lng: place.lng,
           // Use enriched data from Google Places API if available
@@ -110,8 +129,9 @@ export function convertItineraryToEditorData(
 
       // Add paragraph block after each place if there's paragraph text
       if (place.paragraph && place.paragraph.trim()) {
+        const paragraphId = paragraphBlockId || crypto.randomUUID();
         blocks.push({
-          id: generateBlockId(),
+          id: paragraphId, // Use linked ID if available
           type: "paragraph",
           data: {
             text: place.paragraph.trim(),
@@ -278,19 +298,7 @@ export function updatePlaceInEditorData(
   };
 }
 
-/**
- * Generates a unique block ID
- */
-function generateBlockId(): string {
-  return `block_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-/**
- * Generates a consistent place ID based on day and position
- */
-function generatePlaceId(dayNumber: number, placeIndex: number): string {
-  return `place_day${dayNumber}_${placeIndex}`;
-}
+// Note: ID generation now uses crypto.randomUUID() for collision-resistant GUIDs
 
 /**
  * Validates that the Editor.js data is properly structured

@@ -122,7 +122,8 @@ export default function EditorPageContent() {
     if (state.currentItinerary && !state.editorData) {
       console.log("📝 Converting current itinerary to editor data");
       const convertedEditorData = convertItineraryToEditorData(
-        state.currentItinerary
+        state.currentItinerary,
+        false
       );
       setLocalEditorData(convertedEditorData);
     }

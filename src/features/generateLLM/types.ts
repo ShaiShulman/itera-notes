@@ -3,6 +3,8 @@ export interface PlaceLocation {
   lat: number;
   lng: number;
   paragraph?: string; // Description text from the itinerary
+  shortName?: string; // Shortened name extracted from [[]] format
+  linkedParagraphId?: string; // ID of linked paragraph for sync editing
   // Enhanced data from Google Places API
   placeId?: string;
   address?: string;

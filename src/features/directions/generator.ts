@@ -102,6 +102,35 @@ export async function extractPlacesFromItinerary(itinerary: GeneratedItinerary):
 }
 
 /**
+ * Convert GeneratedItinerary places to PlaceBlockData format for cross-day direction calculations
+ */
+function convertPlaceLocationsToPlaceData(itinerary: GeneratedItinerary): PlaceBlockData[] {
+  return itinerary.days.flatMap((day) => 
+    day.places.map((place, index) => ({
+      uid: `place_${day.dayNumber}_${index}`,
+      name: place.name || "",
+      shortName: place.shortName || "",
+      linkedParagraphId: place.linkedParagraphId || "",
+      lat: place.lat || 0,
+      lng: place.lng || 0,
+      placeId: place.placeId || "",
+      address: place.address || "",
+      rating: place.rating || 0,
+      photoReferences: place.photoReferences || [],
+      description: place.description || "",
+      thumbnailUrl: place.thumbnailUrl || "",
+      status: place.status || "found",
+      notes: "",
+      drivingTimeFromPrevious: place.drivingTimeFromPrevious || 0,
+      drivingDistanceFromPrevious: place.drivingDistanceFromPrevious || 0,
+      isDayFinish: false, // Default for new itineraries
+      hideInMap: false,
+      __type: "place" as const,
+    }))
+  );
+}
+
+/**
  * Calculate directions for multiple days with cross-day connections
  * This version is specifically for editor context where we have place metadata
  */
@@ -231,151 +260,7 @@ export async function calculateDirectionsForDaysWithCrossDayConnections(
   };
 }
 
-/**
- * Calculate directions for multiple days (original version for backward compatibility)
- */
-export async function calculateDirectionsForDays(placesByDay: {
-  [dayIndex: number]: PlaceCoordinate[];
-}): Promise<{
-  directions: DirectionsData[];
-  drivingTimesByUid: { [uid: string]: { time: number; distance: number } };
-}> {
-  const directionsResults: DirectionsData[] = [];
-  const drivingTimesByUid: {
-    [uid: string]: { time: number; distance: number };
-  } = {};
 
-  // Calculate directions for each day with at least 2 places
-  for (const [dayIndexStr, places] of Object.entries(placesByDay)) {
-    const dayIndex = parseInt(dayIndexStr); // This is actually 0-based dayIndex, not 1-based dayNumber
-    const dayNumber = dayIndex + 1; // Convert to 1-based for display
-
-    if (places.length < 2) {
-      console.log(
-        `🚗 Day ${dayNumber}: Only ${
-          places.length
-        } place(s), skipping directions`
-      );
-      continue;
-    }
-
-    console.log(
-      `🚗 Day ${dayNumber}: Calculating directions for ${
-        places.length
-      } places`
-    );
-
-    try {
-      // Call directions API for this day
-      const directionsResponse: DirectionsResponse = await calculateDirections(
-        places
-      );
-
-      // Check if this is a fallback straight-line response
-      if (directionsResponse.isFallbackStraightLine) {
-        console.warn(
-          `⚠️ Day ${dayNumber}: No driving route found, using straight-line fallback`
-        );
-      }
-
-      // Extract driving times and distances
-      const { times, distances } = await extractDrivingTimes(
-        directionsResponse,
-        places
-      );
-
-      // Store driving times by UID
-      places.forEach((place, index) => {
-        if (place.uid) {
-          drivingTimesByUid[place.uid] = {
-            time: times[index] || 0,
-            distance: distances[index] || 0,
-          };
-        }
-      });
-
-      // Store directions result for map rendering
-      // dayIndex is already 0-based, no conversion needed
-      
-      // Validate dayIndex is valid (non-negative)
-      if (dayIndex < 0) {
-        console.warn(`⚠️ Skipping directions for invalid dayIndex: ${dayIndex}`);
-        continue;
-      }
-      
-      const dayColor = getDayColor(dayIndex);
-      
-      // Validate color is valid
-      if (!dayColor) {
-        console.warn(`⚠️ Skipping directions for dayIndex ${dayIndex} - no color available`);
-        continue;
-      }
-      
-      directionsResults.push({
-        dayIndex,
-        color: dayColor,
-        directionsResult: directionsResponse,
-      });
-
-      const routeType = directionsResponse.isFallbackStraightLine
-        ? "straight-line fallback"
-        : "driving route";
-      console.log(
-        `✅ Day ${dayNumber}: ${routeType} calculated successfully`
-      );
-    } catch (error) {
-      console.error(
-        `❌ Day ${dayNumber}: Error calculating directions:`,
-        error
-      );
-    }
-  }
-
-  const fallbackCount = directionsResults.filter(
-    (r) => r.directionsResult.isFallbackStraightLine
-  ).length;
-  const realRoutesCount = directionsResults.length - fallbackCount;
-
-  console.log(
-    `✅ Directions calculation completed - ${realRoutesCount} driving routes, ${fallbackCount} straight-line fallbacks`
-  );
-
-  return {
-    directions: directionsResults,
-    drivingTimesByUid,
-  };
-}
-
-/**
- * Generate directions from a GeneratedItinerary - main endpoint
- */
-export async function generateDirectionsFromItinerary(
-  itinerary: GeneratedItinerary
-): Promise<DirectionsData[]> {
-  console.log("🚗 Starting directions generation from itinerary");
-
-  try {
-    // Extract places from itinerary
-    const placesByDay = await extractPlacesFromItinerary(itinerary);
-
-    if (Object.keys(placesByDay).length === 0) {
-      console.log("🚗 No days with places found in itinerary");
-      return [];
-    }
-
-    // Calculate directions for all days
-    const { directions } = await calculateDirectionsForDays(placesByDay);
-
-    console.log(
-      `🚗 Generated ${directions.length} direction routes for itinerary`
-    );
-    return directions;
-  } catch (error) {
-    console.error("❌ Error generating directions from itinerary:", error);
-    // Return empty array rather than throwing - directions are optional
-    return [];
-  }
-}
 
 /**
  * Generate directions and update itinerary with driving times
@@ -400,8 +285,11 @@ export async function generateDirectionsWithTimes(
       };
     }
 
-    // Calculate directions for all days
-    const { directions, drivingTimesByUid } = await calculateDirectionsForDays(placesByDay);
+    // Convert to place data for cross-day logic
+    const allPlacesData = convertPlaceLocationsToPlaceData(itinerary);
+
+    // Calculate directions using cross-day connections
+    const { directions, drivingTimesByUid } = await calculateDirectionsForDaysWithCrossDayConnections(placesByDay, allPlacesData);
 
     // Update the itinerary with driving times
     const updatedItinerary: GeneratedItinerary = {
@@ -412,21 +300,17 @@ export async function generateDirectionsWithTimes(
           const uid = `place_${day.dayNumber}_${placeIndex}`;
           const drivingData = drivingTimesByUid[uid];
           
-          if (drivingData) {
-            return {
-              ...place,
-              drivingTimeFromPrevious: drivingData.time,
-              drivingDistanceFromPrevious: drivingData.distance,
-            };
-          }
-          
-          return place;
+          return drivingData ? {
+            ...place,
+            drivingTimeFromPrevious: drivingData.time,
+            drivingDistanceFromPrevious: drivingData.distance,
+          } : place;
         }),
       })),
     };
 
     console.log(
-      `🚗 Generated ${directions.length} direction routes and updated itinerary with driving times`
+      `🚗 Generated ${directions.length} direction routes and updated itinerary with driving times using cross-day connections`
     );
 
     return {
