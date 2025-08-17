@@ -30,6 +30,7 @@ export default class DayBlock {
       dayNumber: data?.dayNumber || 1, // This will be overridden by auto-calculation
       date: data?.date || "",
       title: data?.title || "",
+      region: data?.region || "",
     };
   }
 
@@ -487,7 +488,7 @@ export default class DayBlock {
     });
 
     // Handle blur event for title input (focus loss to other elements)
-    titleInput.addEventListener("blur", (e) => {
+    titleInput.addEventListener("blur", () => {
       // Small delay to ensure we're not just moving to another field in the same block
       setTimeout(() => {
         if (this.isCurrentlyEditingTitle) {
@@ -539,6 +540,48 @@ export default class DayBlock {
 
     // Add Enter key handler for date input
     dateInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        this.saveAndCollapse();
+      }
+    });
+
+    // Region input
+    const regionLabel = document.createElement("label");
+    regionLabel.style.cssText = `
+      display: block;
+      color: #1e40af;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    `;
+    regionLabel.textContent = "Region/City:";
+
+    const regionInput = document.createElement("input");
+    regionInput.type = "text";
+    regionInput.placeholder = "Enter region or city...";
+    regionInput.value = this.data.region || "";
+    regionInput.style.cssText = `
+      border: 1px solid #93c5fd;
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: white;
+      color: #1e40af;
+      font-size: 14px;
+      margin-bottom: 16px;
+      width: 100%;
+    `;
+    regionInput.addEventListener("change", (e) => {
+      this.data.region = (e.target as HTMLInputElement).value;
+    });
+
+    regionInput.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+
+    // Add Enter key handler for region input
+    regionInput.addEventListener("keypress", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         e.stopPropagation();
@@ -600,6 +643,8 @@ export default class DayBlock {
     this.wrapper.appendChild(titleInput);
     this.wrapper.appendChild(dateLabel);
     this.wrapper.appendChild(dateInput);
+    this.wrapper.appendChild(regionLabel);
+    this.wrapper.appendChild(regionInput);
     this.wrapper.appendChild(saveButtonContainer);
 
     // Focus title input after rendering
@@ -637,11 +682,15 @@ export default class DayBlock {
     const dateInput = blockContent.querySelector(
       'input[type="date"]'
     ) as HTMLInputElement;
+    const regionInput = blockContent.querySelector(
+      'input[placeholder="Enter region or city..."]'
+    ) as HTMLInputElement;
 
     return {
       dayNumber: this.actualDayNumber, // Use auto-calculated number
       title: titleInput?.value || this.data.title || "",
       date: dateInput?.value || this.data.date || "",
+      region: regionInput?.value || this.data.region || "",
     };
   }
 
@@ -684,6 +733,7 @@ export default class DayBlock {
       dayNumber: false,
       date: false,
       title: false,
+      region: false,
     };
   }
 }

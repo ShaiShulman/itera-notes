@@ -121,7 +121,8 @@ function NewItineraryForm() {
         }
 
         // Convert to editor data format
-        const editorData = convertItineraryToEditorData(actionResult.data);
+        console.log("🔍 BEFORE CONVERSION - Sample place data:", actionResult.data.days[0]?.places[0]);
+        const editorData = convertItineraryToEditorData(actionResult.data, true);
 
         // Store form metadata in context
         setFormMetadata({

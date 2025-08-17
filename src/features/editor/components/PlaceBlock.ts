@@ -33,7 +33,7 @@ export default class PlaceBlock extends BasePlaceBlock<PlaceBlockData> {
     return {
       uid:
         data?.uid ||
-        `place_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        crypto.randomUUID(),
       placeId: data?.placeId || "",
       name: data?.name || "",
       address: data?.address || "",

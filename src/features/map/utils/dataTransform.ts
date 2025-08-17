@@ -32,7 +32,8 @@ export function createEditorDataHash(blocks: EditorBlock[]): string {
         const lng = placeData.lng || "null";
         const name = placeData.name || "unnamed";
         const uid = placeData.uid || "no-uid";
-        return `${block.type}:${name}:${lat}:${lng}:${uid}`;
+        const hideInMap = placeData.hideInMap ? "hidden" : "visible";
+        return `${block.type}:${name}:${lat}:${lng}:${uid}:${hideInMap}`;
       }
       return `${block.type}:unknown`;
     })
@@ -84,20 +85,22 @@ export function transformEditorDataToMapData(blocks: EditorBlock[]): MapData {
       });
     } else if (block.type === "place" || block.type === "hotel") {
       const placeData = block.data as BasePlaceBlockData;
-      // Only add places that have valid location data
-      if (placeData.lat && placeData.lng && placeData.name) {
-        // Increment the appropriate counter based on type
-        let itemNumberInDay: number;
-        if (block.type === "place") {
-          placeNumberInDay++;
-          itemNumberInDay = placeNumberInDay;
-        } else {
-          hotelNumberInDay++;
-          itemNumberInDay = hotelNumberInDay;
-        }
+      
+      // Always increment counters to maintain correct numbering (regardless of visibility)
+      let itemNumberInDay: number;
+      if (block.type === "place") {
+        placeNumberInDay++;
+        itemNumberInDay = placeNumberInDay;
+      } else {
+        hotelNumberInDay++;
+        itemNumberInDay = hotelNumberInDay;
+      }
+      
+      // Only add places that have valid location data and are not hidden from map
+      if (placeData.lat && placeData.lng && placeData.name && !placeData.hideInMap) {
 
         const newPlace: MapPlace = {
-          id: `place-${Date.now()}-${Math.random()}`,
+          id: crypto.randomUUID(),
           uid: placeData.uid,
           name: placeData.name,
           coordinates: { lat: placeData.lat, lng: placeData.lng },
@@ -110,6 +113,7 @@ export function transformEditorDataToMapData(blocks: EditorBlock[]): MapData {
           drivingTimeFromPrevious: placeData.drivingTimeFromPrevious,
           drivingDistanceFromPrevious: placeData.drivingDistanceFromPrevious,
           type: block.type === "place" ? "place" : "hotel",
+          hideInMap: placeData.hideInMap,
         };
 
         console.log(
@@ -120,8 +124,10 @@ export function transformEditorDataToMapData(blocks: EditorBlock[]): MapData {
           } (day color: ${newPlace.color})`
         );
         places.push(newPlace);
+      } else if (placeData.hideInMap) {
+        console.log(`👁️ Skipping hidden ${block.type} ${itemNumberInDay}: ${placeData.name}`);
       } else {
-        console.log(`❌ Invalid place data for:`, placeData.name);
+        console.log(`❌ Invalid place data for ${block.type} ${itemNumberInDay}:`, placeData.name);
       }
     }
   });
@@ -144,14 +150,15 @@ export function extractPlacesFromEditorData(blocks: EditorBlock[]): MapPlace[] {
     } else if (block.type === "place") {
       const placeData = block.data as BasePlaceBlockData;
 
-      if (placeData.lat && placeData.lng && placeData.name) {
+      if (placeData.lat && placeData.lng && placeData.name && !placeData.hideInMap) {
         places.push({
-          id: `place-${Date.now()}-${Math.random()}`,
+          id: crypto.randomUUID(),
           name: placeData.name,
           coordinates: { lat: placeData.lat, lng: placeData.lng },
           dayIndex: currentDayIndex >= 0 ? currentDayIndex : undefined,
           placeId: placeData.placeId,
           thumbnailUrl: placeData.thumbnailUrl,
+          hideInMap: placeData.hideInMap,
         });
       }
     }

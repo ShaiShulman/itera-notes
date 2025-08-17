@@ -103,27 +103,16 @@ export class GoogleDirectionsService {
 
     const url = `${baseUrl}?${params.toString()}`;
 
-    console.log(
-      `🚗 DirectionsService: Requesting directions for ${places.length} places`
-    );
-    console.log(
-      `🚗 DirectionsService: ${places.map((p) => p.name).join(" → ")}`
-    );
-
     // Use cache wrapper for the API call
-    const data = await withDirectionsCache(
-      places,
-      "driving",
-      async () => {
-        const response = await fetch(url);
+    const data = await withDirectionsCache(places, "driving", async () => {
+      const response = await fetch(url);
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        return response.json();
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    );
+
+      return response.json();
+    });
 
     try {
       const duration = Date.now() - startTime;
@@ -199,7 +188,6 @@ export class GoogleDirectionsService {
         status: "success",
       });
 
-      console.log(`✅ DirectionsService: Successfully calculated directions`);
       return data;
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -242,23 +230,13 @@ export class GoogleDirectionsService {
     const route = directionsResponse.routes[0];
     const legs = route.legs;
 
-    console.log(
-      `🚗 DirectionsService: Extracting times from ${legs.length} legs`
-    );
-
     // First place has no driving time from previous
     const drivingTimes = [0];
 
     // Add driving time for each subsequent place
-    legs.forEach((leg, index) => {
+    legs.forEach((leg) => {
       const drivingTimeMinutes = Math.round(leg.duration.value / 60);
       drivingTimes.push(drivingTimeMinutes);
-
-      console.log(
-        `🚗 Leg ${index + 1}: ${leg.duration.text} (${drivingTimeMinutes}m) - ${
-          leg.distance.text
-        }`
-      );
     });
 
     return drivingTimes;

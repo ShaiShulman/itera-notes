@@ -23,11 +23,11 @@ const navigationItems = [
     href: "/itineraries",
     icon: "clipboard" as const,
   },
-  {
-    name: "Settings",
-    href: "/settings",
-    icon: "settings" as const,
-  },
+  // {
+  //   name: "Settings",
+  //   href: "/settings",
+  //   icon: "settings" as const,
+  // },
   // {
   //   name: "Help",
   //   href: "/help",
@@ -54,7 +54,7 @@ export default function TopNavigation() {
                 className="h-13 w-13"
               />
               <h1 className="text-3xl font-bold text-white tracking-tight">
-                breadcrumbs.ai
+                BreadCrumbs.ai
               </h1>
             </div>
           </div>

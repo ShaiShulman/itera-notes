@@ -1120,11 +1120,12 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       contentContainer.appendChild(statusIndicator);
     }
 
-    // Driving time display (if available and confirmed)
+    // Driving time display (if available and confirmed, and place is not hidden from map)
     if (
       !isEditing &&
       this.data.drivingTimeFromPrevious &&
-      this.data.drivingTimeFromPrevious > 0
+      this.data.drivingTimeFromPrevious > 0 &&
+      !this.data.hideInMap
     ) {
       const drivingTime = document.createElement("span");
       drivingTime.style.cssText = `
@@ -2211,6 +2212,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
           blockElement: editorBlock,
           blockType: this.blockType,
           blockName: this.data.name,
+          linkedParagraphId: this.data.linkedParagraphId || null,
         },
       });
 
@@ -2354,6 +2356,8 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       uid: this.data.uid,
       placeId: this.data.placeId,
       name: this.data.name,
+      shortName: this.data.shortName,
+      linkedParagraphId: this.data.linkedParagraphId,
       address: this.data.address,
       rating: this.data.rating,
       photoReferences: this.data.photoReferences,
