@@ -12,26 +12,28 @@ export async function enrichPlacesWithGoogleData(
       console.log(
         `🔍 Enriching ${day.places.length} places for day ${day.dayNumber}`
       );
-      
+
       // Use the day's region for context, or fallback to a generic region if not set
       const currentRegion = day.region || "";
-      console.log(`🌍 Using region context for day ${day.dayNumber}: "${currentRegion}"`);
+      console.log(
+        `🌍 Using region context for day ${day.dayNumber}: "${currentRegion}"`
+      );
 
       const enrichedPlaces = await Promise.all(
         day.places.map(async (place) => {
           try {
             // Construct search query with region context if available
-            const searchQuery = currentRegion 
+            const searchQuery = currentRegion
               ? `${place.name}, ${currentRegion}`
               : place.name;
-            
+
             console.log(`🔍 Searching for place: ${searchQuery}`);
 
             const result = await findPlaceByNameAction(searchQuery);
 
             if (result.success && result.place) {
               console.log(`✅ Found Google Places data for: ${place.name}`);
-              
+
               // Calculate distance between original and Google Places coordinates
               const distance = calculateStraightLineDistance(
                 place.lat,
@@ -39,15 +41,23 @@ export async function enrichPlacesWithGoogleData(
                 result.place.lat,
                 result.place.lng
               );
-              
+
               const distanceKm = distance / 1000;
-              console.log(`📏 Distance between original and Google Places coordinates: ${distanceKm.toFixed(2)} km`);
-              
+              console.log(
+                `📏 Distance between original and Google Places coordinates: ${distanceKm.toFixed(
+                  2
+                )} km`
+              );
+
               // Check if distance is within acceptable range (150km)
               const MAX_DISTANCE_KM = 150;
-              
+
               if (distanceKm <= MAX_DISTANCE_KM) {
-                console.log(`✅ Distance validation passed for: ${place.name} (${distanceKm.toFixed(2)} km <= ${MAX_DISTANCE_KM} km)`);
+                console.log(
+                  `✅ Distance validation passed for: ${
+                    place.name
+                  } (${distanceKm.toFixed(2)} km <= ${MAX_DISTANCE_KM} km)`
+                );
                 console.log(
                   `🔍 ENRICHMENT: "${place.name}" has paragraph: "${
                     place.paragraph || "NONE"
@@ -67,7 +77,13 @@ export async function enrichPlacesWithGoogleData(
                   status: "found" as const,
                 };
               } else {
-                console.log(`⚠️ Distance validation failed for: ${place.name} (${distanceKm.toFixed(2)} km > ${MAX_DISTANCE_KM} km). Keeping original coordinates.`);
+                console.log(
+                  `⚠️ Distance validation failed for: ${
+                    place.name
+                  } (${distanceKm.toFixed(
+                    2
+                  )} km > ${MAX_DISTANCE_KM} km). Keeping original coordinates.`
+                );
                 return {
                   ...place,
                   // Keep original coordinates but add some Google Places metadata if available

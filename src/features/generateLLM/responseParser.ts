@@ -100,7 +100,9 @@ export function parseItineraryResponse(
       const extractedRegion = extractRegionFromTitle(titleWithRegion);
       if (extractedRegion) {
         lastKnownRegion = extractedRegion;
-        console.log(`🌍 Extracted region from day title ${dayNumber}: ${extractedRegion}`);
+        console.log(
+          `🌍 Extracted region from day title ${dayNumber}: ${extractedRegion}`
+        );
       }
 
       // Clean the title by removing region markers and extra asterisks
@@ -182,13 +184,13 @@ export function parseItineraryResponse(
       if (currentDay.description.length > 0) {
         currentDay.description += " ";
       }
-      
+
       // Clean the line by removing region markers and extra asterisks
       const cleanLine = line
         .replace(/\*\*"[^"]+"/g, "") // Remove **"RegionName" patterns
         .replace(/\*\*/g, "") // Remove any remaining asterisks
         .trim();
-      
+
       currentDay.description += cleanLine;
 
       // Check if this line contains a region marker and extract it
