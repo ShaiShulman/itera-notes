@@ -2,6 +2,27 @@ import { PlaceLocation, ItineraryDay, GeneratedItinerary } from "./types";
 
 export type { PlaceLocation, ItineraryDay, GeneratedItinerary };
 
+function extractShortNameAndCleanParagraph(paragraph: string): {
+  shortName: string;
+  cleanedParagraph: string;
+} {
+  const match = paragraph.match(/\[\[([^\]]+)\]\]/);
+  const shortName = match ? match[1] : "";
+  const cleanedParagraph = paragraph.replace(/\[\[[^\]]+\]\]/g, "").trim();
+  return { shortName, cleanedParagraph };
+}
+
+function extractRegionFromDescription(description: string): string | undefined {
+  const regionMatch = description.match(/\*\*"([^"]+)"/);
+  return regionMatch ? regionMatch[1] : undefined;
+}
+
+function extractRegionFromTitle(title: string): string | undefined {
+  // Match **RegionName** pattern in title
+  const regionMatch = title.match(/\*\*([^*]+)\*\*/);
+  return regionMatch ? regionMatch[1] : undefined;
+}
+
 export function parseItineraryResponse(
   response: string,
   destination: string,
@@ -26,6 +47,7 @@ export function parseItineraryResponse(
   let currentPlace: PlaceLocation | null = null;
   let pendingDescription = "";
   let collectingDayDescription = false;
+  let lastKnownRegion = "";
 
   console.log("🔍 Starting to parse itinerary response");
 
@@ -37,17 +59,26 @@ export function parseItineraryResponse(
     const dayMatch = line.match(/^DAY\s+(\d+)\s*-\s*(.+)/i);
     if (dayMatch) {
       console.log(`📅 Found day header: ${line}`);
-      
+
       // Save pending description to current place if exists
       if (currentPlace && pendingDescription.trim()) {
-        currentPlace.paragraph = pendingDescription.trim();
-        console.log(`💾 Saved description to place "${currentPlace.name}": ${pendingDescription.trim()}`);
+        const { shortName, cleanedParagraph } =
+          extractShortNameAndCleanParagraph(pendingDescription.trim());
+        currentPlace.paragraph = cleanedParagraph;
+        currentPlace.shortName = shortName;
+        console.log(
+          `💾 SAVED PARAGRAPH: "${currentPlace.name}" → "${cleanedParagraph}"${
+            shortName ? ` (shortName: ${shortName})` : ""
+          }`
+        );
       }
 
       // Save previous day if exists
       if (currentDay) {
         days.push(currentDay);
-        console.log(`📤 Saved day ${currentDay.dayNumber} with ${currentDay.places.length} places`);
+        console.log(
+          `📤 Saved day ${currentDay.dayNumber} with ${currentDay.places.length} places`
+        );
       }
 
       // Parse day info
@@ -60,19 +91,33 @@ export function parseItineraryResponse(
         ? dateMatch[1]
         : calculateDateForDay(startDate, dayNumber - 1);
 
-      const title = dayInfo
+      const titleWithRegion = dayInfo
         .replace(/\d{4}-\d{2}-\d{2}/, "")
         .replace(/^\s*-\s*/, "") // Remove any leading " - "
+        .trim();
+
+      // Extract region from title before cleaning it
+      const extractedRegion = extractRegionFromTitle(titleWithRegion);
+      if (extractedRegion) {
+        lastKnownRegion = extractedRegion;
+        console.log(`🌍 Extracted region from day title ${dayNumber}: ${extractedRegion}`);
+      }
+
+      // Clean the title by removing region markers and extra asterisks
+      const cleanTitle = titleWithRegion
+        .replace(/\*\*[^*]+\*\*/g, "") // Remove **RegionName** patterns
+        .replace(/\*\*/g, "") // Remove any remaining asterisks
         .trim();
 
       currentDay = {
         dayNumber,
         date,
-        title: title || `Day ${dayNumber}`,
+        title: cleanTitle || `Day ${dayNumber}`,
         description: "",
+        region: lastKnownRegion,
         places: [],
       };
-      
+
       currentPlace = null;
       pendingDescription = "";
       collectingDayDescription = true; // Start collecting day description after day header
@@ -86,11 +131,18 @@ export function parseItineraryResponse(
     );
     if (placeMatch && currentDay) {
       console.log(`📍 Found place: ${placeMatch[1]}`);
-      
+
       // Save pending description to current place if exists
       if (currentPlace && pendingDescription.trim()) {
-        currentPlace.paragraph = pendingDescription.trim();
-        console.log(`💾 Saved description to place "${currentPlace.name}": ${pendingDescription.trim()}`);
+        const { shortName, cleanedParagraph } =
+          extractShortNameAndCleanParagraph(pendingDescription.trim());
+        currentPlace.paragraph = cleanedParagraph;
+        currentPlace.shortName = shortName;
+        console.log(
+          `💾 SAVED PARAGRAPH: "${currentPlace.name}" → "${cleanedParagraph}"${
+            shortName ? ` (shortName: ${shortName})` : ""
+          }`
+        );
       }
 
       const placeName = placeMatch[1].replace("**", "").trim();
@@ -103,11 +155,15 @@ export function parseItineraryResponse(
           lat,
           lng,
           paragraph: "", // Initialize as empty
+          shortName: "", // Will be extracted from paragraph
+          linkedParagraphId: "", // Empty for generated content
         };
         currentDay.places.push(currentPlace);
         pendingDescription = "";
         collectingDayDescription = false; // Stop collecting day description once we hit places
-        console.log(`➕ Added place to day: ${placeName}`);
+        console.log(
+          `➕ CREATED PLACE: "${placeName}" (lat: ${lat}, lng: ${lng})`
+        );
       }
       continue;
     }
@@ -126,8 +182,26 @@ export function parseItineraryResponse(
       if (currentDay.description.length > 0) {
         currentDay.description += " ";
       }
-      currentDay.description += line;
-      console.log(`📄 Added to day description: ${line}`);
+      
+      // Clean the line by removing region markers and extra asterisks
+      const cleanLine = line
+        .replace(/\*\*"[^"]+"/g, "") // Remove **"RegionName" patterns
+        .replace(/\*\*/g, "") // Remove any remaining asterisks
+        .trim();
+      
+      currentDay.description += cleanLine;
+
+      // Check if this line contains a region marker and extract it
+      const extractedRegion = extractRegionFromDescription(line);
+      if (extractedRegion) {
+        currentDay.region = extractedRegion;
+        lastKnownRegion = extractedRegion;
+        console.log(
+          `🌍 Extracted region for day ${currentDay.dayNumber}: ${extractedRegion}`
+        );
+      }
+
+      console.log(`📄 Added to day description: ${cleanLine}`);
       continue;
     }
 
@@ -144,13 +218,25 @@ export function parseItineraryResponse(
 
   // Don't forget to save the last place's description and last day
   if (currentPlace && pendingDescription.trim()) {
-    currentPlace.paragraph = pendingDescription.trim();
-    console.log(`💾 Saved final description to place "${currentPlace.name}": ${pendingDescription.trim()}`);
+    const { shortName, cleanedParagraph } = extractShortNameAndCleanParagraph(
+      pendingDescription.trim()
+    );
+    currentPlace.paragraph = cleanedParagraph;
+    currentPlace.shortName = shortName;
+    console.log(
+      `💾 SAVED FINAL PARAGRAPH: "${
+        currentPlace.name
+      }" → "${cleanedParagraph}"${
+        shortName ? ` (shortName: ${shortName})` : ""
+      }`
+    );
   }
-  
+
   if (currentDay) {
     days.push(currentDay);
-    console.log(`📤 Saved final day ${currentDay.dayNumber} with ${currentDay.places.length} places`);
+    console.log(
+      `📤 Saved final day ${currentDay.dayNumber} with ${currentDay.places.length} places`
+    );
   }
 
   // Fill in missing days if needed
@@ -161,12 +247,13 @@ export function parseItineraryResponse(
       date: calculateDateForDay(startDate, dayNumber - 1),
       title: `Day ${dayNumber}`,
       description: "Free time to explore",
+      region: lastKnownRegion, // Use last known region for missing days
       places: [],
     });
   }
 
   console.log(`✅ Parsing complete. Found ${days.length} days total.`);
-  
+
   return {
     title,
     destination,

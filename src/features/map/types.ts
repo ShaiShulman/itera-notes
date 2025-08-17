@@ -15,6 +15,7 @@ export interface MapPlace {
   drivingTimeFromPrevious?: number; // Duration in minutes from previous place
   drivingDistanceFromPrevious?: number; // Distance in meters from previous place
   type?: "place" | "hotel"; // Type of place
+  hideInMap?: boolean; // Whether this place should be hidden from map display
 }
 
 export interface MapData {

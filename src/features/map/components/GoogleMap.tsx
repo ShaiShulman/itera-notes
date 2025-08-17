@@ -414,6 +414,12 @@ export const GoogleMap = React.memo(function GoogleMap({
         return;
       }
 
+      // Skip places that are hidden from map
+      if (place.hideInMap) {
+        console.log(`👁️ Skipping hidden place: ${place.name}`);
+        return;
+      }
+
       // Use place-specific color or fallback to day color or default
       const color =
         place.color ||
@@ -475,7 +481,8 @@ export const GoogleMap = React.memo(function GoogleMap({
           typeof place.coordinates.lat === "number" &&
           typeof place.coordinates.lng === "number" &&
           !isNaN(place.coordinates.lat) &&
-          !isNaN(place.coordinates.lng)
+          !isNaN(place.coordinates.lng) &&
+          !place.hideInMap // Exclude hidden places from bounds
         );
       });
 
@@ -785,7 +792,7 @@ export const GoogleMap = React.memo(function GoogleMap({
 function calculateMapCenter(places: MapPlace[]): { lat: number; lng: number } {
   if (places.length === 0) return DEFAULT_CENTER;
 
-  const validPlaces = places.filter((place) => place.coordinates);
+  const validPlaces = places.filter((place) => place.coordinates && !place.hideInMap);
   if (validPlaces.length === 0) return DEFAULT_CENTER;
 
   const totalLat = validPlaces.reduce(
@@ -807,7 +814,7 @@ function calculateMapZoom(places: MapPlace[]): number {
   if (places.length === 0) return 10;
   if (places.length === 1) return 12;
 
-  const validPlaces = places.filter((place) => place.coordinates);
+  const validPlaces = places.filter((place) => place.coordinates && !place.hideInMap);
   if (validPlaces.length <= 1) return 12;
 
   // Calculate bounding box

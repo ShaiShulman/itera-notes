@@ -65,7 +65,7 @@ export const DEFAULT_INTERESTS = [
   "Photography",
   "Music & Events",
   "Local Markets",
-  "Religious Sites",
+  "Hiking Trails",
 ];
 
 // Travel style options with descriptions

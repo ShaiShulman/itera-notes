@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Smart Travel Planner",
+  title: "BreadCrumbs.ai",
   description:
     "Plan your travel itineraries with our intelligent, places-aware notebook and interactive map visualization.",
   keywords: [
@@ -29,8 +29,7 @@ export const metadata: Metadata = {
     "vacation",
     "trip",
   ],
-  authors: [{ name: "Smart Travel Planner Team" }],
-  viewport: "width=device-width, initial-scale=1",
+  authors: [{ name: "Shai Shulman" }],
 };
 
 export default function RootLayout({
