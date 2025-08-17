@@ -21,13 +21,15 @@ export async function enrichPlacesWithGoogleData(
 
             if (result.success && result.place) {
               console.log(`✅ Found Google Places data for: ${place.name}`);
+              console.log(`🔍 ENRICHMENT: "${place.name}" has paragraph: "${place.paragraph || 'NONE'}"`);
               return {
                 ...place,
                 placeId: result.place.placeId,
                 address: result.place.address,
                 rating: result.place.rating,
                 photoReferences: result.place.photoReferences,
-                description: result.place.description,
+                // Keep our parsed paragraph, don't overwrite with Google's description
+                description: place.paragraph || result.place.description,
                 thumbnailUrl: result.place.thumbnailUrl,
                 status: "found" as const,
               };

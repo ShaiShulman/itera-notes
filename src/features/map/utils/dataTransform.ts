@@ -97,7 +97,7 @@ export function transformEditorDataToMapData(blocks: EditorBlock[]): MapData {
         }
 
         const newPlace: MapPlace = {
-          id: `place-${Date.now()}-${Math.random()}`,
+          id: crypto.randomUUID(),
           uid: placeData.uid,
           name: placeData.name,
           coordinates: { lat: placeData.lat, lng: placeData.lng },
@@ -146,7 +146,7 @@ export function extractPlacesFromEditorData(blocks: EditorBlock[]): MapPlace[] {
 
       if (placeData.lat && placeData.lng && placeData.name) {
         places.push({
-          id: `place-${Date.now()}-${Math.random()}`,
+          id: crypto.randomUUID(),
           name: placeData.name,
           coordinates: { lat: placeData.lat, lng: placeData.lng },
           dayIndex: currentDayIndex >= 0 ? currentDayIndex : undefined,

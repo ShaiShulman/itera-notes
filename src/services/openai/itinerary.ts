@@ -9,6 +9,14 @@ if (!process.env.OPENAI_API_KEY) {
   throw new Error("OPENAI_API_KEY environment variable is required");
 }
 
+const MODEL_NAME = process.env.OPENAI_MODEL || "gpt-4";
+const MAX_TOKENS = process.env.OPENAI_MAX_TOKENS
+  ? parseInt(process.env.OPENAI_MAX_TOKENS)
+  : undefined;
+const TEMPERATURE = process.env.OPENAI_TEMPERATURE
+  ? parseFloat(process.env.OPENAI_TEMPERATURE)
+  : undefined;
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -60,8 +68,8 @@ export async function generateItinerary(
   const startTime = Date.now();
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4",
+    const completionParams: any = {
+      model: MODEL_NAME,
       messages: [
         {
           role: "system",
@@ -73,9 +81,17 @@ export async function generateItinerary(
           content: prompt,
         },
       ],
-      temperature: 0.7,
-      max_tokens: 3000,
-    });
+    };
+
+    if (TEMPERATURE !== undefined) {
+      completionParams.temperature = TEMPERATURE;
+    }
+
+    if (MAX_TOKENS !== undefined) {
+      completionParams.max_tokens = MAX_TOKENS;
+    }
+
+    const completion = await openai.chat.completions.create(completionParams);
 
     const response = completion.choices[0]?.message?.content;
     const duration = Date.now() - startTime;
@@ -87,7 +103,7 @@ export async function generateItinerary(
 
     // Log successful OpenAI call
     apiLogger.logOpenAICall({
-      model: "gpt-4",
+      model: MODEL_NAME,
       prompt,
       response,
       tokensUsed: completion.usage
@@ -120,7 +136,7 @@ export async function generateItinerary(
 
     // Log failed OpenAI call
     apiLogger.logOpenAICall({
-      model: "gpt-4",
+      model: MODEL_NAME,
       prompt,
       duration,
       status: "error",

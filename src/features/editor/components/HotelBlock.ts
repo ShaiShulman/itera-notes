@@ -36,7 +36,7 @@ export default class HotelBlock extends BasePlaceBlock<HotelBlockData> {
     return {
       uid:
         data?.uid ||
-        `hotel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        crypto.randomUUID(),
       placeId: data?.placeId || "",
       name: data?.name || "",
       address: data?.address || "",

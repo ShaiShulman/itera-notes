@@ -60,6 +60,8 @@ export interface BasePlaceBlockData {
   uid?: string;
   placeId?: string;
   name?: string;
+  shortName?: string; // Shortened name extracted from [[]] format
+  linkedParagraphId?: string; // ID of linked paragraph for sync editing
   address?: string;
   rating?: number;
   photoReferences?: string[];

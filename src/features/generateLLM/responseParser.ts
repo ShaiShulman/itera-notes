@@ -2,6 +2,13 @@ import { PlaceLocation, ItineraryDay, GeneratedItinerary } from "./types";
 
 export type { PlaceLocation, ItineraryDay, GeneratedItinerary };
 
+function extractShortNameAndCleanParagraph(paragraph: string): { shortName: string; cleanedParagraph: string } {
+  const match = paragraph.match(/\[\[([^\]]+)\]\]/);
+  const shortName = match ? match[1] : "";
+  const cleanedParagraph = paragraph.replace(/\[\[[^\]]+\]\]/g, "").trim();
+  return { shortName, cleanedParagraph };
+}
+
 export function parseItineraryResponse(
   response: string,
   destination: string,
@@ -40,8 +47,10 @@ export function parseItineraryResponse(
       
       // Save pending description to current place if exists
       if (currentPlace && pendingDescription.trim()) {
-        currentPlace.paragraph = pendingDescription.trim();
-        console.log(`💾 Saved description to place "${currentPlace.name}": ${pendingDescription.trim()}`);
+        const { shortName, cleanedParagraph } = extractShortNameAndCleanParagraph(pendingDescription.trim());
+        currentPlace.paragraph = cleanedParagraph;
+        currentPlace.shortName = shortName;
+        console.log(`💾 SAVED PARAGRAPH: "${currentPlace.name}" → "${cleanedParagraph}"${shortName ? ` (shortName: ${shortName})` : ""}`);
       }
 
       // Save previous day if exists
@@ -89,8 +98,10 @@ export function parseItineraryResponse(
       
       // Save pending description to current place if exists
       if (currentPlace && pendingDescription.trim()) {
-        currentPlace.paragraph = pendingDescription.trim();
-        console.log(`💾 Saved description to place "${currentPlace.name}": ${pendingDescription.trim()}`);
+        const { shortName, cleanedParagraph } = extractShortNameAndCleanParagraph(pendingDescription.trim());
+        currentPlace.paragraph = cleanedParagraph;
+        currentPlace.shortName = shortName;
+        console.log(`💾 SAVED PARAGRAPH: "${currentPlace.name}" → "${cleanedParagraph}"${shortName ? ` (shortName: ${shortName})` : ""}`);
       }
 
       const placeName = placeMatch[1].replace("**", "").trim();
@@ -103,11 +114,13 @@ export function parseItineraryResponse(
           lat,
           lng,
           paragraph: "", // Initialize as empty
+          shortName: "", // Will be extracted from paragraph
+          linkedParagraphId: "", // Empty for generated content
         };
         currentDay.places.push(currentPlace);
         pendingDescription = "";
         collectingDayDescription = false; // Stop collecting day description once we hit places
-        console.log(`➕ Added place to day: ${placeName}`);
+        console.log(`➕ CREATED PLACE: "${placeName}" (lat: ${lat}, lng: ${lng})`);
       }
       continue;
     }
@@ -144,8 +157,10 @@ export function parseItineraryResponse(
 
   // Don't forget to save the last place's description and last day
   if (currentPlace && pendingDescription.trim()) {
-    currentPlace.paragraph = pendingDescription.trim();
-    console.log(`💾 Saved final description to place "${currentPlace.name}": ${pendingDescription.trim()}`);
+    const { shortName, cleanedParagraph } = extractShortNameAndCleanParagraph(pendingDescription.trim());
+    currentPlace.paragraph = cleanedParagraph;
+    currentPlace.shortName = shortName;
+    console.log(`💾 SAVED FINAL PARAGRAPH: "${currentPlace.name}" → "${cleanedParagraph}"${shortName ? ` (shortName: ${shortName})` : ""}`);
   }
   
   if (currentDay) {
