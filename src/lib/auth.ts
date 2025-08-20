@@ -1,7 +1,7 @@
-import NextAuth from "next-auth"
-import Google from "next-auth/providers/google"
-import { PrismaAdapter } from "@auth/prisma-adapter"
-import db from "@/services/database/client"
+import NextAuth from "next-auth";
+import Google from "next-auth/providers/google";
+import { PrismaAdapter } from "@auth/prisma-adapter";
+import db from "@/services/database/client";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(db),
@@ -16,7 +16,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: profile.email,
           emailVerified: profile.email_verified ? new Date() : null,
           // Explicitly exclude image field
-        }
+        };
       },
     }),
   ],
@@ -31,8 +31,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         id: user.id,
       },
     }),
-    signIn: async ({ user, account, profile }) => {
-      // Remove image field from user data to prevent database errors
+    signIn: async ({ user }) => {
       if (user.image) {
         delete user.image;
       }
@@ -42,4 +41,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
     signIn: "/auth/signin",
   },
-})
+});

@@ -63,7 +63,7 @@ export async function enrichPlacesWithGoogleData(
                     place.paragraph || "NONE"
                   }"`
                 );
-                return {
+                const enrichedPlace = {
                   ...place,
                   placeId: result.place.placeId,
                   address: result.place.address,
@@ -71,11 +71,15 @@ export async function enrichPlacesWithGoogleData(
                   lat: result.place.lat,
                   lng: result.place.lng,
                   photoReferences: result.place.photoReferences,
-                  // Keep our parsed paragraph, don't overwrite with Google's description
-                  description: place.paragraph || result.place.description,
+                  // Keep Google Places description separate from our story paragraph
+                  description: result.place.description,
                   thumbnailUrl: result.place.thumbnailUrl,
                   status: "found" as const,
                 };
+                console.log(
+                  `🔍 ENRICHMENT RESULT: "${place.name}" - paragraph: "${enrichedPlace.paragraph || "NONE"}", description: "${enrichedPlace.description || "NONE"}"`
+                );
+                return enrichedPlace;
               } else {
                 console.log(
                   `⚠️ Distance validation failed for: ${
@@ -84,34 +88,46 @@ export async function enrichPlacesWithGoogleData(
                     2
                   )} km > ${MAX_DISTANCE_KM} km). Keeping original coordinates.`
                 );
-                return {
+                const enrichedPlace = {
                   ...place,
                   // Keep original coordinates but add some Google Places metadata if available
                   placeId: result.place.placeId,
                   address: result.place.address,
                   rating: result.place.rating,
                   photoReferences: result.place.photoReferences,
-                  description: place.paragraph || result.place.description,
+                  description: result.place.description,
                   thumbnailUrl: result.place.thumbnailUrl,
                   status: "found" as const,
                   // Keep original lat/lng from LLM generation
                 };
+                console.log(
+                  `🔍 ENRICHMENT RESULT (distance failed): "${place.name}" - paragraph still exists: ${!!enrichedPlace.paragraph}, value: "${enrichedPlace.paragraph || "NONE"}"`
+                );
+                return enrichedPlace;
               }
             } else {
               console.log(
                 `⚠️ Google Places data not found for: ${place.name}, keeping as free text`
               );
-              return {
+              const enrichedPlace = {
                 ...place,
                 status: "free-text" as const,
               };
+              console.log(
+                `🔍 ENRICHMENT RESULT (not found): "${place.name}" - paragraph still exists: ${!!enrichedPlace.paragraph}, value: "${enrichedPlace.paragraph || "NONE"}"`
+              );
+              return enrichedPlace;
             }
           } catch (error) {
             console.error(`❌ Error enriching place ${place.name}:`, error);
-            return {
+            const enrichedPlace = {
               ...place,
               status: "error" as const,
             };
+            console.log(
+              `🔍 ENRICHMENT RESULT (error): "${place.name}" - paragraph still exists: ${!!enrichedPlace.paragraph}, value: "${enrichedPlace.paragraph || "NONE"}"`
+            );
+            return enrichedPlace;
           }
         })
       );

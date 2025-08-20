@@ -16,6 +16,8 @@ interface PolylineRenderResult {
 export class DirectionsPolyRenderer {
   private map: google.maps.Map;
   private polylines: google.maps.Polyline[] = [];
+  private polylinesByDay: Map<number, google.maps.Polyline[]> = new Map();
+  private routesVisible: boolean = true;
 
   constructor(map: google.maps.Map) {
     this.map = map;
@@ -29,6 +31,7 @@ export class DirectionsPolyRenderer {
       polyline.setMap(null);
     });
     this.polylines = [];
+    this.polylinesByDay.clear();
     console.log("🧹 DirectionsPolyRenderer: Cleared all polylines");
   }
 
@@ -165,6 +168,13 @@ export class DirectionsPolyRenderer {
 
         // Store the polyline for cleanup
         this.polylines.push(polyline);
+        
+        // Store polyline by day for day-specific styling
+        const dayIndex = directionData.dayIndex;
+        if (!this.polylinesByDay.has(dayIndex)) {
+          this.polylinesByDay.set(dayIndex, []);
+        }
+        this.polylinesByDay.get(dayIndex)!.push(polyline);
 
         const result: PolylineRenderResult = {
           polyline,
@@ -227,5 +237,84 @@ export class DirectionsPolyRenderer {
     console.log(
       `🎨 DirectionsPolyRenderer: Updated styles for ${this.polylines.length} polylines`
     );
+  }
+
+  /**
+   * Update styling for a specific day only, with different styles for selected vs non-selected days
+   */
+  updateDaySpecificStyles(selectedDayIndex?: number): void {
+    if (!this.routesVisible) {
+      // If routes are hidden, only show selected day
+      this.polylinesByDay.forEach((polylines, dayIndex) => {
+        const shouldShow = selectedDayIndex !== undefined && dayIndex === selectedDayIndex;
+        polylines.forEach((polyline) => {
+          polyline.setVisible(shouldShow);
+          if (shouldShow) {
+            polyline.setOptions({ strokeWeight: 6, strokeOpacity: 0.9 });
+          }
+        });
+      });
+      console.log(`🎨 DirectionsPolyRenderer: Routes hidden, showing only selected day ${selectedDayIndex !== undefined ? selectedDayIndex + 1 : 'none'}`);
+      return;
+    }
+
+    if (selectedDayIndex === undefined) {
+      // Reset all lines to thin styling when no day is selected
+      this.updatePolylineStyles({
+        strokeWeight: 1,
+        strokeOpacity: 0.4
+      });
+      console.log('🎨 DirectionsPolyRenderer: Reset all lines to thin styling');
+      return;
+    }
+
+    // Style each day's polylines
+    this.polylinesByDay.forEach((polylines, dayIndex) => {
+      const isSelected = dayIndex === selectedDayIndex;
+      const styles = isSelected
+        ? { strokeWeight: 6, strokeOpacity: 0.9 } // Thick lines for selected day
+        : { strokeWeight: 2, strokeOpacity: 0.3 }; // Thin, dimmed lines for other days
+
+      polylines.forEach((polyline) => {
+        polyline.setOptions(styles);
+        polyline.setVisible(true); // Ensure visible when routes are shown
+      });
+
+      console.log(
+        `🎨 DirectionsPolyRenderer: Updated day ${dayIndex + 1} (${isSelected ? 'SELECTED' : 'dimmed'}) - ${polylines.length} polylines`
+      );
+    });
+  }
+
+  /**
+   * Toggle route visibility
+   */
+  setRoutesVisible(visible: boolean, selectedDayIndex?: number): void {
+    this.routesVisible = visible;
+    
+    if (visible) {
+      // Show all routes and apply current styling
+      this.polylines.forEach((polyline) => {
+        polyline.setVisible(true);
+      });
+      this.updateDaySpecificStyles(selectedDayIndex);
+      console.log('🎨 DirectionsPolyRenderer: Routes shown');
+    } else {
+      // Hide all routes except selected day
+      this.polylinesByDay.forEach((polylines, dayIndex) => {
+        const shouldShow = selectedDayIndex !== undefined && dayIndex === selectedDayIndex;
+        polylines.forEach((polyline) => {
+          polyline.setVisible(shouldShow);
+        });
+      });
+      console.log(`🎨 DirectionsPolyRenderer: Routes hidden, showing only selected day ${selectedDayIndex !== undefined ? selectedDayIndex + 1 : 'none'}`);
+    }
+  }
+
+  /**
+   * Get current route visibility state
+   */
+  getRoutesVisible(): boolean {
+    return this.routesVisible;
   }
 }

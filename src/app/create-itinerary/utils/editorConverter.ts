@@ -15,10 +15,15 @@ export function convertItineraryToEditorData(
   itinerary: GeneratedItinerary,
   isGenerated: boolean = false
 ): EditorData {
-  console.log(`🔄 CONVERTER CALLED: isGenerated=${isGenerated}, title="${itinerary.title}"`);
+  console.log(
+    `🔄 CONVERTER CALLED: isGenerated=${isGenerated}, title="${itinerary.title}"`
+  );
   console.log(`🔄 CONVERTER: Processing ${itinerary.days.length} days`);
   if (itinerary.days[0]?.places[0]) {
-    console.log(`🔄 CONVERTER: First place sample:`, itinerary.days[0].places[0]);
+    console.log(
+      `🔄 CONVERTER: First place sample:`,
+      itinerary.days[0].places[0]
+    );
   }
   const blocks: EditorBlockData[] = [];
 
@@ -86,16 +91,41 @@ export function convertItineraryToEditorData(
     // Add individual place blocks for each place in the day
     for (let i = 0; i < day.places.length; i++) {
       const place = day.places[i];
+
+      // Use existing linkedParagraphId from parsed data, or generate if needed
+      console.log(
+        `🔍 CONVERTER: "${place.name}" - paragraph: "${
+          place.paragraph || "NONE"
+        }", linkedParagraphId: "${place.linkedParagraphId || "NONE"}", isGenerated: ${isGenerated}`
+      );
+      console.log(`🔍 CONVERTER DEBUG: place object keys:`, Object.keys(place));
+      console.log(`🔍 CONVERTER DEBUG: paragraph check - hasProperty: ${place.hasOwnProperty('paragraph')}, value: "${place.paragraph}", trimmed: "${place.paragraph?.trim()}", length: ${place.paragraph?.length || 0}`);
       
-      // Generate paragraph block ID if this is a generated itinerary and place has paragraph
-      console.log(`🔍 CONVERTER: "${place.name}" - paragraph: "${place.paragraph || 'NONE'}", isGenerated: ${isGenerated}`);
       let paragraphBlockId = "";
-      if (place.paragraph && place.paragraph.trim() && isGenerated) {
-        paragraphBlockId = crypto.randomUUID();
-        console.log(`🔗 LINKED: "${place.name}" → paragraph ${paragraphBlockId.slice(0,8)}`);
-      }
       
+      // First priority: use existing linkedParagraphId from parsed data
+      if (place.linkedParagraphId && place.linkedParagraphId.trim()) {
+        paragraphBlockId = place.linkedParagraphId;
+        console.log(
+          `🔗 USING EXISTING ID: "${place.name}" → paragraph ${paragraphBlockId.slice(0, 8)}`
+        );
+      }
+      // Second priority: generate new ID if this is generated content with paragraph
+      else if (place.paragraph && place.paragraph.trim() && isGenerated) {
+        paragraphBlockId = crypto.randomUUID();
+        console.log(
+          `🔗 GENERATED NEW ID: "${place.name}" → paragraph ${paragraphBlockId.slice(0, 8)}`
+        );
+      } else {
+        console.log(`🚫 NOT LINKED: "${place.name}" - existing ID: ${!!place.linkedParagraphId}, paragraph: ${!!place.paragraph}, trimmed: ${!!place.paragraph?.trim()}, isGenerated: ${isGenerated}`);
+      }
+
       const placeBlockId = crypto.randomUUID();
+      const finalLinkedParagraphId = paragraphBlockId || place.linkedParagraphId || "";
+      console.log(
+        `📦 PLACE BLOCK: "${place.name}" - final linkedParagraphId: ${finalLinkedParagraphId || "EMPTY"} (from: ${paragraphBlockId ? "paragraphBlockId" : place.linkedParagraphId ? "place.linkedParagraphId" : "neither"})`
+      );
+      
       const placeBlock: EditorBlockData = {
         id: placeBlockId,
         type: "place",
@@ -104,7 +134,7 @@ export function convertItineraryToEditorData(
           uid: `place_${day.dayNumber}_${i}`,
           name: place.name,
           shortName: place.shortName || "",
-          linkedParagraphId: paragraphBlockId,
+          linkedParagraphId: finalLinkedParagraphId,
           lat: place.lat,
           lng: place.lng,
           // Use enriched data from Google Places API if available
@@ -130,6 +160,9 @@ export function convertItineraryToEditorData(
       // Add paragraph block after each place if there's paragraph text
       if (place.paragraph && place.paragraph.trim()) {
         const paragraphId = paragraphBlockId || crypto.randomUUID();
+        console.log(
+          `📄 CREATING PARAGRAPH: "${place.name}" - paragraphId: ${paragraphId.slice(0,8)}, placeLinkedId: ${(place.linkedParagraphId || "NONE").slice(0,8)}, match: ${paragraphId === paragraphBlockId}`
+        );
         blocks.push({
           id: paragraphId, // Use linked ID if available
           type: "paragraph",
@@ -140,6 +173,8 @@ export function convertItineraryToEditorData(
       }
     }
   }
+
+  console.log(`🔄 CONVERTER: Blocks:`, JSON.stringify(blocks, null, 2));
 
   return {
     time: Date.now(),

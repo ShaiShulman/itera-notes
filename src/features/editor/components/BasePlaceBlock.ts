@@ -2206,6 +2206,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     if (editorBlock) {
       // Dispatch a custom deletion event that the ItineraryEditor can handle
       // This will use the Editor.js blocks.delete(index) API properly
+      console.log(
+        `🗑️ PLACE DELETE: "${this.data.name}" linkedParagraphId: ${this.data.linkedParagraphId || "NONE"}`
+      );
+      console.log(`🗑️ PLACE DATA KEYS:`, Object.keys(this.data));
+      console.log(`🗑️ PLACE DATA:`, JSON.stringify(this.data, null, 2));
       const deleteEvent = new CustomEvent("block:requestDelete", {
         bubbles: true,
         detail: {

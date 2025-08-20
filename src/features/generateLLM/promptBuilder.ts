@@ -54,7 +54,7 @@ Requirements:
 - For each place, provide a description in a narrative style that shows why the specific traveller would want to visit it, what can they expect to do there and a bit of interesting cultural and historical background about the place. 
 - Write in a tourist guide style. Start paragraph with 2nd person language always start with a verb ("discover the old city..., hike to the top..."), avoid reapting the same language. 
 - Paragraphs should be no more than 25 words for a day and no more than 40 words for a place
-- In each place description, include a shortened version of the place name surrounded by double square brackets [[ShortName]] for easy reference
+- In each place description, include the place name (either the full name or a shortened version if appropriate) surrounded by **double asterisks** within the paragraph text. This name will be used for interactive linking and should be the most recognizable name for the place
 - For each day, provide an intro with the theme of the day and the types of activies and possibly some historical background (depending on and subject to the travelers interests)
 - The title of at least the first day should include the name of the region or city, surrounded by ** (for example: **Rome**). Each consecutive day concerning a new city or region should also include this formatting
 - Each day should also have a region context - if you move to a new city or region, mention it clearly in the day title with the **RegionName** format

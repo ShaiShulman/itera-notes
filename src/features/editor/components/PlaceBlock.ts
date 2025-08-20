@@ -36,6 +36,8 @@ export default class PlaceBlock extends BasePlaceBlock<PlaceBlockData> {
         crypto.randomUUID(),
       placeId: data?.placeId || "",
       name: data?.name || "",
+      shortName: data?.shortName || "",
+      linkedParagraphId: data?.linkedParagraphId || "",
       address: data?.address || "",
       rating: data?.rating || 0,
       photoReferences: data?.photoReferences || [],
