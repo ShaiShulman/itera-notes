@@ -1,18 +1,29 @@
 
-# Use the official Node.js runtime as a parent image
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
+# RUN apk add --no-cache libc6-compat
 WORKDIR /app
+
+# Install sqlite dependencies
+RUN apk add --no-cache openssl sqlite
 
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
 # Install dependencies including dev dependencies for build
 RUN npm ci --ignore-scripts
+
+# Install Prisma CLI for running migrations
+RUN npm install prisma --save-dev
+
+COPY prisma ./prisma/
+COPY prisma/migrations ./prisma/migrations/
+
+ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
+RUN npx prisma generate
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -30,6 +41,11 @@ RUN npm run build
 # Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app
+
+RUN apk add --no-cache openssl sqlite
+
+# Install Prisma CLI in runtime to run migrations
+RUN npm install -g prisma@6.13.0
 
 ENV NODE_ENV=production
 # Uncomment the following line in case you want to disable telemetry during runtime.
@@ -58,14 +74,25 @@ RUN chown nextjs:nodejs /app/src/services/database
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma/
+COPY --from=builder --chown=nextjs:nodejs /app/prisma/migrations ./prisma/migrations/
+ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
+ENV DATABASE_URL="file:/app/prisma/dev.db"
+
 USER nextjs
+
+# Ensure database directory and file are writable by runtime user
+RUN chmod -R u+rwX,g+rwX /app/prisma || true
 
 EXPOSE 3000
 
 # Create volumes for logs and database persistence
-VOLUME ["/app/logs", "/app/src/services/database"]
+VOLUME ["/app/logs", "/app/prisma"]
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"] 
+COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
+RUN chmod +x ./docker-entrypoint.sh
+
+ENTRYPOINT ["./docker-entrypoint.sh"]
