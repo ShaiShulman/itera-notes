@@ -53,6 +53,7 @@ export interface DayBlockData {
   dayNumber: number;
   date?: string;
   title?: string;
+  description?: string;
   region?: string;
 }
 

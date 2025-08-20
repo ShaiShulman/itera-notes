@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import { useItinerary } from "@/contexts/ItineraryContext";
 import { AddPlacePopupProps } from "./types";
 import { getDayColor } from "../utils/colors";
@@ -83,11 +84,13 @@ export function AddPlacePopup({
 
           {/* Place Image */}
           {placeData?.thumbnailUrl && (
-            <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0">
-              <img
+            <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0">
+              <Image
                 src={getPlacePhotoUrl(placeData.thumbnailUrl, 150)}
                 alt={placeData.name}
-                className="w-full h-full object-cover"
+                fill
+                className="object-cover"
+                sizes="64px"
               />
             </div>
           )}

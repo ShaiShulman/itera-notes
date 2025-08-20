@@ -39,6 +39,8 @@ export default class HotelBlock extends BasePlaceBlock<HotelBlockData> {
         crypto.randomUUID(),
       placeId: data?.placeId || "",
       name: data?.name || "",
+      shortName: data?.shortName || "",
+      linkedParagraphId: data?.linkedParagraphId || "",
       address: data?.address || "",
       rating: data?.rating || 0,
       photoReferences: data?.photoReferences || [],

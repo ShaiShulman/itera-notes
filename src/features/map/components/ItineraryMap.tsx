@@ -77,7 +77,6 @@ export function ItineraryMap({
       emptyResult
     );
     return emptyResult;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataHash, directionsData]); // Back to using hash for optimization
 
   const handlePlaceClick = useCallback(

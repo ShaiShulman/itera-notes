@@ -1,4 +1,3 @@
- 
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -8,6 +7,8 @@ import type {
   PlaceBlockData,
   BasePlaceBlockData,
 } from "../types";
+import StoryModeToggle, { EditorMode } from "./StoryModeToggle";
+import StoryModeView from "./StoryModeView";
 import {
   PlaceCoordinate,
   DirectionsResponse,
@@ -18,6 +19,7 @@ import { PlaceLocation } from "@/services/openai/itinerary";
 import {
   calculateDayBounds,
   emitFitDayBounds,
+  emitDirectionStyleUpdate,
 } from "@/features/map/boundsManager";
 import { triggerPlaceNumberingUpdate } from "./BasePlaceBlock";
 import HeaderBlock from "@editorjs/header";
@@ -123,7 +125,7 @@ function findInsertionPointAfterDay(
 // Helper function to find block index by ID
 function findBlockIndexById(editorData: EditorData, blockId: string): number {
   const blocks = editorData.blocks || [];
-  return blocks.findIndex(block => block.id === blockId);
+  return blocks.findIndex((block) => block.id === blockId);
 }
 
 // Helper function to extract places data from editor grouped by day
@@ -176,7 +178,7 @@ async function extractPlacesDataFromEditor(editorRef: any): Promise<{
           if (!placeData.hideInMap) {
             placesByDay[currentDayIndex].push(placeCoordinate);
           }
-          
+
           // Always add to allPlaces for metadata (driving times need to be calculated for all places)
           allPlaces.push(enhancedPlaceData);
         }
@@ -280,6 +282,8 @@ export default function ItineraryEditor({
   const holderRef = useRef<HTMLDivElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentMode, setCurrentMode] = useState<EditorMode>("edit");
+  const [storyModeData, setStoryModeData] = useState<EditorData | null>(null);
   const { setSelectedPlace, state, updateDay } = useItinerary();
   const { selectedPlace } = state;
 
@@ -311,6 +315,20 @@ export default function ItineraryEditor({
     },
     []
   );
+
+  // Get current editor data for story mode
+  const getCurrentEditorData =
+    useCallback(async (): Promise<EditorData | null> => {
+      if (!editorRef.current || typeof editorRef.current.save !== "function") {
+        return data || null;
+      }
+      try {
+        return await editorRef.current.save();
+      } catch (error) {
+        console.error("Error getting current editor data:", error);
+        return data || null;
+      }
+    }, [data]);
 
   // Function to sync editor deletions back to context
   const syncEditorDeletionsToContext = useCallback(
@@ -702,11 +720,18 @@ export default function ItineraryEditor({
 
             // Add event listener for block deletion requests
             const handleDeleteBlockRequest = async (event: CustomEvent) => {
-              const { blockElement, blockType, blockName, linkedParagraphId } = event.detail;
+              const { blockElement, blockType, blockName, linkedParagraphId } =
+                event.detail;
               console.log(
                 `🗑️ DELETE REQUEST: ${blockType} "${blockName}"${
-                  linkedParagraphId ? ` (linked: ${linkedParagraphId.slice(0,8)})` : " (no link)"
+                  linkedParagraphId
+                    ? ` (linked: ${linkedParagraphId.slice(0, 8)})`
+                    : " (no link)"
                 }`
+              );
+              console.log(
+                "🗑️ DELETE EVENT DETAIL:",
+                JSON.stringify(event.detail, null, 2)
               );
 
               if (editorRef.current?.blocks && blockElement) {
@@ -731,14 +756,36 @@ export default function ItineraryEditor({
                     if (linkedParagraphId) {
                       try {
                         const outputData = await editorRef.current.save();
-                        const paragraphIndex = findBlockIndexById(outputData, linkedParagraphId);
-                        
+                        console.log(
+                          `🔍 SEARCHING for paragraph ID: ${linkedParagraphId.slice(
+                            0,
+                            8
+                          )} among ${outputData.blocks.length} blocks`
+                        );
+                        console.log(
+                          `🔍 PARAGRAPH BLOCKS:`,
+                          outputData.blocks
+                            .filter((b) => b.type === "paragraph")
+                            .map((b) => ({
+                              type: b.type,
+                              id: b.id!.slice(0, 8),
+                              text: (b.data as any).text?.slice(0, 50),
+                            }))
+                        );
+                        const paragraphIndex = findBlockIndexById(
+                          outputData,
+                          linkedParagraphId
+                        );
+
                         if (paragraphIndex >= 0) {
                           console.log(
-                            `🗑️ DELETING LINKED PARAGRAPH at index ${paragraphIndex}`
+                            `🗑️ DELETING LINKED PARAGRAPH at index ${paragraphIndex} with ID ${linkedParagraphId.slice(
+                              0,
+                              8
+                            )}`
                           );
                           editorRef.current.blocks.delete(paragraphIndex);
-                          
+
                           // Adjust the place block index if paragraph was before it
                           if (paragraphIndex < blockIndex) {
                             blockIndex--;
@@ -748,7 +795,17 @@ export default function ItineraryEditor({
                           }
                         } else {
                           console.warn(
-                            `ItineraryEditor: Could not find linked paragraph with ID: ${linkedParagraphId}`
+                            `ItineraryEditor: Could not find linked paragraph with ID: ${linkedParagraphId.slice(
+                              0,
+                              8
+                            )}`
+                          );
+                          console.warn(
+                            `Available IDs:`,
+                            outputData.blocks.map((b) => ({
+                              type: b.type,
+                              id: b.id!.slice(0, 8),
+                            }))
                           );
                         }
                       } catch (error) {
@@ -781,6 +838,67 @@ export default function ItineraryEditor({
               }
             };
 
+            // Add story mode event listeners for map integration
+            const handleStoryDayHover = (event: CustomEvent) => {
+              const { dayNumber, places } = event.detail;
+              console.log("📡 story:dayHover received:", {
+                dayNumber,
+                placeCount: places.length,
+              });
+
+              // Fit map bounds to day places with max zoom constraint
+              if (places.length > 0) {
+                const dayPlaceCoords = places
+                  .filter((place: BasePlaceBlockData) => place.lat && place.lng)
+                  .map((place: BasePlaceBlockData) => ({
+                    lat: place.lat!,
+                    lng: place.lng!,
+                    name: place.name || "Unnamed Place",
+                  }));
+
+                if (dayPlaceCoords.length > 0) {
+                  const bounds = calculateDayBounds(dayPlaceCoords);
+                  if (bounds) {
+                    emitFitDayBounds(bounds, MAX_ZOOM_LEVEL);
+                  }
+                }
+              }
+
+              // Highlight this day's directions (thick lines) and dim others (thin lines)
+              emitDirectionStyleUpdate(dayNumber - 1); // Convert to 0-based dayIndex
+            };
+
+            const handleStoryPlaceHover = (event: CustomEvent) => {
+              const { place, dayNumber } = event.detail;
+              console.log("📡 story:placeHover received:", {
+                placeName: place.name,
+                dayNumber,
+              });
+
+              // Set selected place on map
+              if (place.uid) {
+                setSelectedPlace({
+                  uid: place.uid,
+                  dayIndex: (dayNumber || 1) - 1,
+                });
+              }
+
+              // Highlight this day's directions (thick lines) and dim others (thin lines)
+              if (dayNumber) {
+                emitDirectionStyleUpdate(dayNumber - 1); // Convert to 0-based dayIndex
+              }
+            };
+
+            const handleStoryHoverEnd = () => {
+              console.log("📡 story:hoverEnd received");
+
+              // Clear selected place
+              setSelectedPlace(null);
+
+              // Reset all direction lines to normal thickness (no highlighted day)
+              emitDirectionStyleUpdate(); // No dayIndex = reset all to normal
+            };
+
             if (holderRef.current) {
               holderRef.current.addEventListener(
                 "dayblock:addBlock",
@@ -793,6 +911,22 @@ export default function ItineraryEditor({
               holderRef.current.addEventListener(
                 "block:requestDelete",
                 handleDeleteBlockRequest as any
+              );
+            }
+
+            // Add story mode event listeners to window
+            if (typeof window !== "undefined") {
+              window.addEventListener(
+                "story:dayHover",
+                handleStoryDayHover as EventListener
+              );
+              window.addEventListener(
+                "story:placeHover",
+                handleStoryPlaceHover as EventListener
+              );
+              window.addEventListener(
+                "story:hoverEnd",
+                handleStoryHoverEnd as EventListener
               );
             }
           },
@@ -814,6 +948,14 @@ export default function ItineraryEditor({
           () => {}
         );
       }
+
+      // Remove story mode event listeners from window
+      if (typeof window !== "undefined") {
+        window.removeEventListener("story:dayHover", () => {});
+        window.removeEventListener("story:placeHover", () => {});
+        window.removeEventListener("story:hoverEnd", () => {});
+      }
+
       if (
         editorRef.current &&
         typeof editorRef.current.destroy === "function"
@@ -952,6 +1094,13 @@ export default function ItineraryEditor({
     }
   }, [onRefreshReady, isReady, refreshDirections]);
 
+  // Update story mode data when switching to story mode
+  useEffect(() => {
+    if (currentMode === "story") {
+      getCurrentEditorData().then(setStoryModeData);
+    }
+  }, [currentMode, getCurrentEditorData]);
+
   if (error) {
     return (
       <div className="itinerary-editor">
@@ -1067,8 +1216,15 @@ export default function ItineraryEditor({
 
   return (
     <div className="itinerary-editor h-full flex flex-col relative">
-      {/* Toolbar - Sticky at top */}
-      {isReady && (
+      {/* Mode Toggle - Always visible */}
+      <StoryModeToggle
+        currentMode={currentMode}
+        onModeChange={setCurrentMode}
+        disabled={!isReady}
+      />
+
+      {/* Edit Mode Toolbar - Only in edit mode */}
+      {isReady && currentMode === "edit" && (
         <div className="sticky top-0 z-10 flex-shrink-0 mb-4 p-3 bg-white border border-slate-200 rounded-lg shadow-sm">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-slate-700 mr-4">
@@ -1225,12 +1381,31 @@ export default function ItineraryEditor({
         </div>
       )}
 
-      {/* Editor Container - Scrollable content */}
+      {/* Content Area - Conditional rendering based on mode */}
       <div className="flex-1 min-h-0 overflow-y-auto">
+        {/* Edit Mode - Editor Container - Always render but conditionally hide */}
         <div
           ref={holderRef}
-          className="h-full border border-slate-200 rounded-lg p-4 text-black editor-holder"
+          className={`h-full border border-slate-200 rounded-lg p-4 text-black editor-holder ${
+            currentMode === "edit" ? "block" : "hidden"
+          }`}
         />
+
+        {/* Story Mode - Story View - Only render when in story mode */}
+        {currentMode === "story" && (
+          <div className="h-full border border-slate-200 rounded-lg p-4 bg-white">
+            {storyModeData ? (
+              <StoryModeView editorData={storyModeData} />
+            ) : (
+              <div className="flex items-center justify-center h-64 text-gray-500">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+                  <p>Loading story view...</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

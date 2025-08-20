@@ -78,6 +78,12 @@ export async function generateItineraryAction(
       // Don't fail the entire operation if directions fail
     }
 
+    // Debug: Check if paragraph field exists in final data
+    console.log(
+      `🔍 FINAL DATA CHECK - Sample place before returning to client:`,
+      JSON.stringify(updatedItinerary.days[0]?.places[0], null, 2)
+    );
+
     // Revalidate the itineraries page to ensure fresh data
     revalidatePath("/itineraries");
 

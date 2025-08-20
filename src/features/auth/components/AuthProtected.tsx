@@ -10,13 +10,13 @@ interface AuthProtectedProps {
   fallback?: ReactNode;
 }
 
-export function AuthProtected({ 
-  children, 
-  redirectTo = "/", 
+export function AuthProtected({
+  children,
+  redirectTo = "/",
   requireAuth = true,
-  fallback 
+  fallback,
 }: AuthProtectedProps) {
-  const { isLoading, isAuthenticated, isProtected } = useAuthProtection({
+  const { isLoading, isProtected } = useAuthProtection({
     redirectTo,
     requireAuth,
   });

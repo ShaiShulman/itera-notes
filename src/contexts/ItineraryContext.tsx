@@ -582,6 +582,8 @@ export function ItineraryProvider({ children }: ItineraryProviderProps) {
     state.isDirty,
     state.isSaving,
     state.currentItineraryId,
+    state.directionsData,
+    state.formMetadata,
   ]);
 
   // Action creators

@@ -213,6 +213,22 @@ export function emitFitDayBounds(
 }
 
 /**
+ * Emit a custom event to update direction line styles for selected day
+ */
+export function emitDirectionStyleUpdate(
+  selectedDayIndex?: number
+): void {
+  if (typeof window === 'undefined') return;
+  
+  const event = new CustomEvent('map:updateDirectionStyles', {
+    detail: { selectedDayIndex }
+  });
+  
+  window.dispatchEvent(event);
+  console.log('🗺️ Direction style update event emitted:', { selectedDayIndex });
+}
+
+/**
  * Debounce function to limit how often a function can be called
  */
 export function debounce<T extends (...args: any[]) => void>(

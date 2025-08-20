@@ -6,7 +6,7 @@
 export function formatTimeAgo(date: Date): string {
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  
+
   if (diffInSeconds < 10) {
     return "just now";
   } else if (diffInSeconds < 60) {
@@ -19,7 +19,7 @@ export function formatTimeAgo(date: Date): string {
     return `${hours}h ago`;
   } else {
     const days = Math.floor(diffInSeconds / 86400);
-    
+
     // Show relative time for up to 7 days, then show date
     if (days <= 7) {
       return `${days}d ago`;
@@ -36,4 +36,22 @@ export function formatTimeAgo(date: Date): string {
  */
 export function formatRelativeTime(date: Date): string {
   return formatTimeAgo(date);
+}
+
+/**
+ * Format date nicely as "Thu, Sep 4"
+ * @param dateString - The date string to format
+ * @returns The formatted date
+ */
+export function formatDate(dateString: string): string {
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return dateString;
+  }
 }
