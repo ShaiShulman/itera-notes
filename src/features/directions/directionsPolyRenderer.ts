@@ -273,7 +273,7 @@ export class DirectionsPolyRenderer {
       const isSelected = dayIndex === selectedDayIndex;
       const styles = isSelected
         ? { strokeWeight: 6, strokeOpacity: 0.9 } // Thick lines for selected day
-        : { strokeWeight: 2, strokeOpacity: 0.3 }; // Thin, dimmed lines for other days
+        : { strokeWeight: 4, strokeOpacity: 0.4 }; // Thicker lines for other days
 
       polylines.forEach((polyline) => {
         polyline.setOptions(styles);

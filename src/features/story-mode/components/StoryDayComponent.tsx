@@ -2,7 +2,7 @@
 
 import React from "react";
 import { getDayColor } from "../../map/utils/colors";
-import { formatDrivingTimeAndDistance } from "../utils/formatting";
+import { formatDrivingTimeAndDistance } from "../../editor/utils/formatting";
 import { formatDate } from "@/utils/timeUtils";
 import { cleanString } from "@/utils/strings";
 

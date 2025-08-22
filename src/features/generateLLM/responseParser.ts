@@ -1,4 +1,6 @@
 import { PlaceLocation, ItineraryDay, GeneratedItinerary } from "./types";
+// import { cleanString } from "@/utils/strings";
+import { getUniqueId } from "@/utils/getUniqueId";
 
 export type { PlaceLocation, ItineraryDay, GeneratedItinerary };
 
@@ -9,8 +11,8 @@ function extractShortNameAndCleanParagraph(paragraph: string): {
   // Look for **PlaceName** pattern within the paragraph text
   const match = paragraph.match(/\*\*([^*]+)\*\*/);
   const shortName = match ? match[1] : "";
-  // Keep the paragraph as-is (don't remove the **PlaceName** markers for story mode processing)
-  const cleanedParagraph = paragraph.trim();
+  // First trim, then apply cleanString for final cleaning
+  const cleanedParagraph = paragraph.trim(); //cleanString(paragraph.trim()) || "";
   return { shortName, cleanedParagraph };
 }
 
@@ -68,15 +70,17 @@ export function parseItineraryResponse(
           extractShortNameAndCleanParagraph(pendingDescription.trim());
         currentPlace.paragraph = cleanedParagraph;
         currentPlace.shortName = shortName;
-        
+
         // Generate linkedParagraphId for places with paragraphs in generated content
         if (cleanedParagraph.trim()) {
-          currentPlace.linkedParagraphId = crypto.randomUUID();
+          currentPlace.linkedParagraphId = getUniqueId();
           console.log(
-            `🔗 LINKED: "${currentPlace.name}" → paragraph ${currentPlace.linkedParagraphId.slice(0, 8)}`
+            `🔗 LINKED: "${
+              currentPlace.name
+            }" → paragraph ${currentPlace.linkedParagraphId.slice(0, 8)}`
           );
         }
-        
+
         console.log(
           `💾 SAVED PARAGRAPH: "${currentPlace.name}" → "${cleanedParagraph}"${
             shortName ? ` (shortName: ${shortName})` : ""
@@ -150,15 +154,17 @@ export function parseItineraryResponse(
           extractShortNameAndCleanParagraph(pendingDescription.trim());
         currentPlace.paragraph = cleanedParagraph;
         currentPlace.shortName = shortName;
-        
+
         // Generate linkedParagraphId for places with paragraphs in generated content
         if (cleanedParagraph.trim()) {
-          currentPlace.linkedParagraphId = crypto.randomUUID();
+          currentPlace.linkedParagraphId = getUniqueId();
           console.log(
-            `🔗 LINKED: "${currentPlace.name}" → paragraph ${currentPlace.linkedParagraphId.slice(0, 8)}`
+            `🔗 LINKED: "${
+              currentPlace.name
+            }" → paragraph ${currentPlace.linkedParagraphId.slice(0, 8)}`
           );
         }
-        
+
         console.log(
           `💾 SAVED PARAGRAPH: "${currentPlace.name}" → "${cleanedParagraph}"${
             shortName ? ` (shortName: ${shortName})` : ""
@@ -244,15 +250,17 @@ export function parseItineraryResponse(
     );
     currentPlace.paragraph = cleanedParagraph;
     currentPlace.shortName = shortName;
-    
+
     // Generate linkedParagraphId for places with paragraphs in generated content
     if (cleanedParagraph.trim()) {
-      currentPlace.linkedParagraphId = crypto.randomUUID();
+      currentPlace.linkedParagraphId = getUniqueId();
       console.log(
-        `🔗 LINKED: "${currentPlace.name}" → paragraph ${currentPlace.linkedParagraphId.slice(0, 8)}`
+        `🔗 LINKED: "${
+          currentPlace.name
+        }" → paragraph ${currentPlace.linkedParagraphId.slice(0, 8)}`
       );
     }
-    
+
     console.log(
       `💾 SAVED FINAL PARAGRAPH: "${
         currentPlace.name

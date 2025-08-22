@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { EditorData, BasePlaceBlockData } from "../types";
+import { EditorData, BasePlaceBlockData } from "../../editor/types";
 import StoryDayComponent, { StoryDayData } from "./StoryDayComponent";
 import InlinePlaceName from "./InlinePlaceName";
 import PlaceDetailsPopup from "./PlaceDetailsPopup";
 import {
   extractDayNumberFromPlace,
   getPreviousLocationForPlace,
-} from "../utils/placeUtils";
+} from "../../editor/utils/placeUtils";
 
 export interface StoryModeViewProps {
   editorData: EditorData;
@@ -78,6 +78,41 @@ export const StoryModeView: React.FC<StoryModeViewProps> = ({ editorData }) => {
       };
     }
   }, [isPinned]);
+
+  // Listen for map place clicks to scroll into view
+  useEffect(() => {
+    const handleMapPlaceClick = (event: CustomEvent) => {
+      const { uid, name } = event.detail;
+      console.log("🗺️ StoryModeView: Received map place click:", { uid, name });
+
+      // Find the place element in the story view and scroll to it
+      const placeElement = document.querySelector(`[data-place-key*="${uid}"]`) as HTMLElement;
+      if (placeElement) {
+        console.log("📍 StoryModeView: Scrolling to place element:", name);
+        placeElement.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center',
+          inline: 'nearest'
+        });
+        
+        // Briefly highlight the element
+        placeElement.style.backgroundColor = '#fef3c7';
+        placeElement.style.transition = 'background-color 0.3s ease';
+        setTimeout(() => {
+          placeElement.style.backgroundColor = '';
+        }, 1500);
+      } else {
+        console.warn("📍 StoryModeView: Could not find place element for uid:", uid);
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("map:placeClicked", handleMapPlaceClick as EventListener);
+      return () => {
+        window.removeEventListener("map:placeClicked", handleMapPlaceClick as EventListener);
+      };
+    }
+  }, []);
 
   const handlePlaceHover = (
     place: BasePlaceBlockData,
@@ -378,6 +413,7 @@ const ContentBlockRenderer: React.FC<{
             shortName={matchingPlace.shortName}
             thumbnailUrl={matchingPlace.thumbnailUrl}
             placeId={matchingPlace.placeId}
+            placeType={(matchingPlace as any).__type === "hotel" ? "hotel" : "place"}
             dataKey={dataKey}
             onHover={(isHovering: boolean, element?: HTMLElement) => {
               console.log("🎯 InlinePlaceName onHover called:", {

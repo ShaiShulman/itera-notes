@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { googlePhotosService } from "@/services/google/photos";
-import { withPlacePhotosCache } from "@/services/google/cacheWrappers";
 
 export async function GET(
   request: NextRequest,
@@ -26,12 +25,8 @@ export async function GET(
       );
     }
 
-    // Get photo with caching
-    const base64Data = await withPlacePhotosCache(
-      reference,
-      width,
-      () => googlePhotosService.fetchPhotoAsBase64(reference, width)
-    );
+    // Get photo (caching handled internally by googlePhotosService)
+    const base64Data = await googlePhotosService.fetchPhotoAsBase64(reference, width);
 
     // Extract content type and base64 data from data URL
     const matches = base64Data.match(/^data:([^;]+);base64,(.+)$/);
