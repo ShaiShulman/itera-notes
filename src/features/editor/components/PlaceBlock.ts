@@ -1,5 +1,6 @@
 import type { PlaceBlockData } from "../types";
 import { BasePlaceBlock } from "./BasePlaceBlock";
+import { getUniqueId } from "@/utils/getUniqueId";
 
 export default class PlaceBlock extends BasePlaceBlock<PlaceBlockData> {
   // Block-specific properties
@@ -33,7 +34,7 @@ export default class PlaceBlock extends BasePlaceBlock<PlaceBlockData> {
     return {
       uid:
         data?.uid ||
-        crypto.randomUUID(),
+        getUniqueId(),
       placeId: data?.placeId || "",
       name: data?.name || "",
       shortName: data?.shortName || "",

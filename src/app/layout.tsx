@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import MainLayout from "@/components/layout/MainLayout";
 import { ItineraryProvider } from "@/contexts/ItineraryContext";
+import { LastItineraryProvider } from "@/contexts/LastItineraryContext";
 import { SessionProvider } from "next-auth/react";
 import { AuthProvider } from "@/contexts/AuthContext";
 
@@ -44,9 +45,11 @@ export default function RootLayout({
       >
         <SessionProvider>
           <AuthProvider>
-            <ItineraryProvider>
-              <MainLayout>{children}</MainLayout>
-            </ItineraryProvider>
+            <LastItineraryProvider>
+              <ItineraryProvider>
+                <MainLayout>{children}</MainLayout>
+              </ItineraryProvider>
+            </LastItineraryProvider>
           </AuthProvider>
         </SessionProvider>
       </body>

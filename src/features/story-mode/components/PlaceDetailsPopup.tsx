@@ -2,10 +2,10 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import Image from "next/image";
-import { BasePlaceBlockData } from "../types";
-import { formatDrivingTimeAndDistance } from "../utils/formatting";
+import { BasePlaceBlockData } from "../../editor/types";
+import { formatDrivingTimeAndDistance } from "../../editor/utils/formatting";
 import { cleanString } from "@/utils/strings";
+import { ImageViewer } from "@/components/ui/ImageViewer";
 
 export interface PlaceDetailsPopupProps {
   placeData: BasePlaceBlockData;
@@ -143,10 +143,12 @@ export const PlaceDetailsPopup: React.FC<PlaceDetailsPopupProps> = ({
           <div className="mb-3">
             <div className="grid grid-cols-4 gap-1">
               {placeData.photoReferences.slice(0, 4).map((photoRef, index) => (
-                <ImageThumbnail
+                <ImageViewer
                   key={index}
                   photoRef={photoRef}
                   placeName={placeData.name || ""}
+                  width="80px"
+                  height="80px"
                 />
               ))}
             </div>
@@ -297,61 +299,6 @@ export const PlaceDetailsPopup: React.FC<PlaceDetailsPopupProps> = ({
   );
 
   return createPortal(popup, document.body);
-};
-
-// Image thumbnail component with loading states
-const ImageThumbnail: React.FC<{ photoRef: string; placeName: string }> = ({
-  photoRef,
-  placeName,
-}) => {
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageError, setImageError] = useState(false);
-  const [showSkeleton, setShowSkeleton] = useState(false);
-
-  useEffect(() => {
-    // Show skeleton after 50ms if image hasn't loaded (not cached)
-    const timer = setTimeout(() => {
-      if (!imageLoaded && !imageError) {
-        setShowSkeleton(true);
-      }
-    }, 50);
-
-    return () => clearTimeout(timer);
-  }, [imageLoaded, imageError]);
-
-  return (
-    <div className="relative w-20 h-20 bg-gray-100 rounded overflow-hidden">
-      {showSkeleton && !imageLoaded && !imageError && (
-        <div className="w-full h-full bg-gray-200 animate-pulse" />
-      )}
-
-      <Image
-        src={`/api/places/photos/${photoRef}?width=200`}
-        alt={placeName}
-        fill
-        className={`object-cover transition-opacity duration-300 ${
-          imageLoaded ? "opacity-100" : "opacity-0"
-        }`}
-        onLoad={() => {
-          setImageLoaded(true);
-          setImageError(false);
-          setShowSkeleton(false);
-        }}
-        onError={() => {
-          setImageError(true);
-          setImageLoaded(false);
-          setShowSkeleton(false);
-        }}
-        sizes="64px"
-      />
-
-      {imageError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 text-gray-400 text-xs">
-          No image
-        </div>
-      )}
-    </div>
-  );
 };
 
 export default PlaceDetailsPopup;

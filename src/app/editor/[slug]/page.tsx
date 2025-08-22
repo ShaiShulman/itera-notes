@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useItinerary } from "@/contexts/ItineraryContext";
+import { useLastItinerary } from "@/contexts/LastItineraryContext";
 import { AuthProtected } from "@/features/auth/components/AuthProtected";
 import { extractIdFromSlug } from "@/utils/itinerary";
 import EditorPageContent from "@/components/EditorPageContent";
@@ -11,6 +12,7 @@ function SlugEditorContent() {
   const params = useParams();
   const router = useRouter();
   const { state, loadItinerary } = useItinerary();
+  const { setLastEditedItinerary } = useLastItinerary();
   
   // Check if this is a fresh itinerary
   const isFreshFromCreate = typeof window !== 'undefined' && 
@@ -47,6 +49,9 @@ function SlugEditorContent() {
         if (state.editorData && state.editorData.blocks && state.editorData.blocks.length > 0) {
           console.log("✅ Using existing itinerary data from context immediately");
           
+          // Set this as the last edited itinerary
+          setLastEditedItinerary(id);
+          
           // Clear the fresh flags
           if (typeof window !== 'undefined') {
             sessionStorage.removeItem('fresh-from-create');
@@ -71,6 +76,9 @@ function SlugEditorContent() {
         
         // Load the itinerary from database
         await loadItinerary(id);
+        
+        // Set this as the last edited itinerary
+        setLastEditedItinerary(id);
         
         // Clear any stale fresh flags
         if (typeof window !== 'undefined') {

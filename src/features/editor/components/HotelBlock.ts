@@ -1,5 +1,6 @@
 import type { HotelBlockData } from "../types";
 import { BasePlaceBlock } from "./BasePlaceBlock";
+import { getUniqueId } from "@/utils/getUniqueId";
 
 export default class HotelBlock extends BasePlaceBlock<HotelBlockData> {
   // Block-specific properties
@@ -36,7 +37,7 @@ export default class HotelBlock extends BasePlaceBlock<HotelBlockData> {
     return {
       uid:
         data?.uid ||
-        crypto.randomUUID(),
+        getUniqueId(),
       placeId: data?.placeId || "",
       name: data?.name || "",
       shortName: data?.shortName || "",

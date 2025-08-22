@@ -1,6 +1,7 @@
 import { MapData, MapPlace, DayData } from "../types";
 import { getDayColor } from "./colors";
 import { BasePlaceBlockData, DayBlockData } from "../../editor/types";
+import { getUniqueId } from "@/utils/getUniqueId";
 
 // Module-level variable to track previous transform hash
 let previousTransformHash = "";
@@ -100,7 +101,7 @@ export function transformEditorDataToMapData(blocks: EditorBlock[]): MapData {
       if (placeData.lat && placeData.lng && placeData.name && !placeData.hideInMap) {
 
         const newPlace: MapPlace = {
-          id: crypto.randomUUID(),
+          id: getUniqueId(),
           uid: placeData.uid,
           name: placeData.name,
           coordinates: { lat: placeData.lat, lng: placeData.lng },
@@ -152,7 +153,7 @@ export function extractPlacesFromEditorData(blocks: EditorBlock[]): MapPlace[] {
 
       if (placeData.lat && placeData.lng && placeData.name && !placeData.hideInMap) {
         places.push({
-          id: crypto.randomUUID(),
+          id: getUniqueId(),
           name: placeData.name,
           coordinates: { lat: placeData.lat, lng: placeData.lng },
           dayIndex: currentDayIndex >= 0 ? currentDayIndex : undefined,

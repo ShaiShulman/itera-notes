@@ -1373,6 +1373,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
           border-radius: 6px;
           overflow: hidden;
           background: #f3f4f6;
+          cursor: pointer;
         `;
 
         const image = document.createElement("img");
@@ -1408,23 +1409,12 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
             skeleton.remove();
           }
           image.style.opacity = "1";
+          
+          // Add eye icon overlay after image loads
+          this.createImageOverlay(imageContainer);
         });
 
-        // Add hover effect and image popup (only after loaded)
-        image.addEventListener("mouseenter", () => {
-          if (image.style.opacity === "1") {
-            image.style.transform = "scale(1.05)";
-            this.showImagePopover(
-              image,
-              `/api/places/photos/${photoRef}?width=600`
-            );
-          }
-        });
-
-        image.addEventListener("mouseleave", () => {
-          image.style.transform = "scale(1)";
-          this.hideImagePopover();
-        });
+        // Add hover effect and image popup handled by the overlay now
 
         // Handle loading error
         image.addEventListener("error", () => {
@@ -1800,6 +1790,69 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       this.imagePopover.remove();
       this.imagePopover = null;
     }
+  }
+
+  protected createImageOverlay(imageContainer: HTMLElement) {
+    // Get the image element and photoRef for popover
+    const image = imageContainer.querySelector("img") as HTMLImageElement;
+    if (!image) return;
+    
+    // Extract photoRef from image src
+    const photoRefMatch = image.src.match(/\/api\/places\/photos\/([^?]+)/);
+    if (!photoRefMatch) return;
+    const photoRef = photoRefMatch[1];
+
+    // Create overlay element
+    const overlay = document.createElement("div");
+    overlay.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+    `;
+
+    // Create eye icon using SVG
+    const eyeIcon = document.createElement("div");
+    eyeIcon.style.cssText = `
+      color: white;
+      width: 16px;
+      height: 16px;
+    `;
+    eyeIcon.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke="currentColor" stroke-width="2"/>
+        <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" stroke="currentColor" stroke-width="2"/>
+      </svg>
+    `;
+
+    overlay.appendChild(eyeIcon);
+    imageContainer.appendChild(overlay);
+
+    // Add hover functionality to show/hide overlay, scale image, and show popover
+    imageContainer.addEventListener("mouseenter", () => {
+      if (image.style.opacity === "1") {
+        overlay.style.opacity = "1";
+        image.style.transform = "scale(1.05)";
+        this.showImagePopover(
+          image,
+          `/api/places/photos/${photoRef}?width=600`
+        );
+      }
+    });
+
+    imageContainer.addEventListener("mouseleave", () => {
+      overlay.style.opacity = "0";
+      image.style.transform = "scale(1)";
+      this.hideImagePopover();
+    });
   }
 
   // Show/hide loading spinner methods

@@ -4,6 +4,7 @@ import {
   PlaceLocation,
 } from "@/services/openai/itinerary";
 import { EditorData, EditorBlockData } from "@/features/editor/types";
+import { getUniqueId } from '@/utils/getUniqueId';
 
 /**
  * Converts a GeneratedItinerary from OpenAI to Editor.js format
@@ -29,7 +30,7 @@ export function convertItineraryToEditorData(
 
   // Add title block
   blocks.push({
-    id: crypto.randomUUID(),
+    id: getUniqueId(),
     type: "header",
     data: {
       text: itinerary.title,
@@ -39,7 +40,7 @@ export function convertItineraryToEditorData(
 
   // Add destination and summary info
   blocks.push({
-    id: crypto.randomUUID(),
+    id: getUniqueId(),
     type: "paragraph",
     data: {
       text: `${itinerary.totalDays}-day trip to ${itinerary.destination}`,
@@ -50,7 +51,7 @@ export function convertItineraryToEditorData(
   for (const day of itinerary.days) {
     // Add day block
     const dayBlock: EditorBlockData = {
-      id: crypto.randomUUID(),
+      id: getUniqueId(),
       type: "day",
       data: {
         dayNumber: day.dayNumber,
@@ -58,7 +59,7 @@ export function convertItineraryToEditorData(
         title: day.title,
         description: day.description,
         places: day.places.map((place, index) => ({
-          id: crypto.randomUUID(),
+          id: getUniqueId(),
           uid: `place_${day.dayNumber}_${index}`,
           name: place.name,
           lat: place.lat,
@@ -82,7 +83,7 @@ export function convertItineraryToEditorData(
     blocks.push(dayBlock);
     if (day.description) {
       blocks.push({
-        id: crypto.randomUUID(),
+        id: getUniqueId(),
         type: "paragraph",
         data: { text: day.description },
       });
@@ -112,7 +113,7 @@ export function convertItineraryToEditorData(
       }
       // Second priority: generate new ID if this is generated content with paragraph
       else if (place.paragraph && place.paragraph.trim() && isGenerated) {
-        paragraphBlockId = crypto.randomUUID();
+        paragraphBlockId = getUniqueId();
         console.log(
           `🔗 GENERATED NEW ID: "${place.name}" → paragraph ${paragraphBlockId.slice(0, 8)}`
         );
@@ -120,7 +121,7 @@ export function convertItineraryToEditorData(
         console.log(`🚫 NOT LINKED: "${place.name}" - existing ID: ${!!place.linkedParagraphId}, paragraph: ${!!place.paragraph}, trimmed: ${!!place.paragraph?.trim()}, isGenerated: ${isGenerated}`);
       }
 
-      const placeBlockId = crypto.randomUUID();
+      const placeBlockId = getUniqueId();
       const finalLinkedParagraphId = paragraphBlockId || place.linkedParagraphId || "";
       console.log(
         `📦 PLACE BLOCK: "${place.name}" - final linkedParagraphId: ${finalLinkedParagraphId || "EMPTY"} (from: ${paragraphBlockId ? "paragraphBlockId" : place.linkedParagraphId ? "place.linkedParagraphId" : "neither"})`
@@ -159,7 +160,7 @@ export function convertItineraryToEditorData(
 
       // Add paragraph block after each place if there's paragraph text
       if (place.paragraph && place.paragraph.trim()) {
-        const paragraphId = paragraphBlockId || crypto.randomUUID();
+        const paragraphId = paragraphBlockId || getUniqueId();
         console.log(
           `📄 CREATING PARAGRAPH: "${place.name}" - paragraphId: ${paragraphId.slice(0,8)}, placeLinkedId: ${(place.linkedParagraphId || "NONE").slice(0,8)}, match: ${paragraphId === paragraphBlockId}`
         );
@@ -333,7 +334,7 @@ export function updatePlaceInEditorData(
   };
 }
 
-// Note: ID generation now uses crypto.randomUUID() for collision-resistant GUIDs
+// Note: ID generation now uses getUniqueId() for collision-resistant GUIDs
 
 /**
  * Validates that the Editor.js data is properly structured
