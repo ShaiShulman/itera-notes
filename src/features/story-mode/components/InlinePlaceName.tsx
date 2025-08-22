@@ -9,6 +9,7 @@ export interface InlinePlaceNameProps {
   thumbnailUrl?: string;
   placeId?: string;
   dataKey?: string; // For identifying the element for popup positioning
+  placeType?: "place" | "hotel"; // Type of place for styling
   onClick?: () => void;
   onHover?: (isHovering: boolean, element?: HTMLElement) => void;
 }
@@ -19,6 +20,7 @@ export const InlinePlaceName: React.FC<InlinePlaceNameProps> = ({
   thumbnailUrl,
   placeId,
   dataKey,
+  placeType = "place",
   onClick,
   onHover,
 }) => {
@@ -26,6 +28,21 @@ export const InlinePlaceName: React.FC<InlinePlaceNameProps> = ({
   const [imageError, setImageError] = useState(false);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const displayName = shortName || name;
+
+  // Define colors based on place type
+  const colors = placeType === "hotel" 
+    ? {
+        background: "bg-violet-50",
+        border: "border-violet-200", 
+        hoverBackground: "hover:bg-violet-100",
+        textColor: "text-violet-700"
+      }
+    : {
+        background: "bg-emerald-50",
+        border: "border-emerald-200",
+        hoverBackground: "hover:bg-emerald-100", 
+        textColor: "text-emerald-700"
+      };
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -82,7 +99,7 @@ export const InlinePlaceName: React.FC<InlinePlaceNameProps> = ({
 
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-1 mx-1 bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100 transition-colors ${
+      className={`inline-flex items-center gap-1 px-2 py-1 mx-1 ${colors.background} border ${colors.border} rounded-md ${colors.hoverBackground} transition-colors ${
         onClick ? 'cursor-pointer' : ''
       }`}
       data-place-key={dataKey}
@@ -149,7 +166,7 @@ export const InlinePlaceName: React.FC<InlinePlaceNameProps> = ({
       )}
 
       {/* Place name */}
-      <span className="text-emerald-700 font-medium text-sm">
+      <span className={`${colors.textColor} font-medium text-sm`}>
         {displayName}
       </span>
     </span>

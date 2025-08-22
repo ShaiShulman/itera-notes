@@ -6,6 +6,20 @@ import { useItinerary } from "@/contexts/ItineraryContext";
 import { AddPlacePopupProps } from "./types";
 import { getDayColor } from "../utils/colors";
 import { getPlacePhotoUrl } from "@/features/editor/utils/photoUtils";
+import { IconLoader, IconPaths } from "@/assets/icons/iconLoader";
+
+// Icon components
+const BanIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM4 12c0-4.42 3.58-8 8-8 1.85 0 3.55.63 4.9 1.69L5.69 16.9C4.63 15.55 4 13.85 4 12zm8 8c-1.85 0-3.55-.63-4.9-1.69L18.31 7.1C19.37 8.45 20 10.15 20 12c0 4.42-3.58 8-8 8z"/>
+  </svg>
+);
+
+const FlagIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z"/>
+  </svg>
+);
 
 export function AddPlacePopup({
   isOpen,
@@ -94,6 +108,23 @@ export function AddPlacePopup({
               />
             </div>
           )}
+
+          {/* Status Icons */}
+          <div className="flex gap-1 flex-shrink-0">
+            {/* Hide in Map Icon */}
+            {(placeData as any)?.hideInMap && (
+              <div className="w-4 h-4 text-red-600 flex-shrink-0" title="Hidden from map">
+                <BanIcon />
+              </div>
+            )}
+            
+            {/* Day Finish Icon */}
+            {(placeData as any)?.isDayFinish && (
+              <div className="w-4 h-4 text-green-600 flex-shrink-0" title="Day finish location">
+                <FlagIcon />
+              </div>
+            )}
+          </div>
 
           {/* Close Button */}
           <button
