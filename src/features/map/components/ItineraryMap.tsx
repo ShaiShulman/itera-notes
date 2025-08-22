@@ -96,6 +96,23 @@ export function ItineraryMap({
         console.log(
           `📍 ItineraryMap: Set selected place - uid: ${place.uid}, dayIndex: ${place.dayIndex}`
         );
+
+        // Emit event for StoryModeView to scroll to place
+        if (typeof window !== "undefined") {
+          const event = new CustomEvent("map:placeClicked", {
+            detail: {
+              uid: place.uid,
+              name: place.name,
+              dayIndex: place.dayIndex,
+            },
+          });
+          window.dispatchEvent(event);
+          console.log("📡 map:placeClicked event emitted:", {
+            uid: place.uid,
+            name: place.name,
+            dayIndex: place.dayIndex,
+          });
+        }
       } else {
         console.warn(
           "📍 ItineraryMap: Place clicked but missing uid or dayIndex:",
