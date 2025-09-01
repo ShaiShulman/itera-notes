@@ -1,4 +1,5 @@
 import { EditorData } from "@/features/editor/types";
+import { getPlacePhotoPopupUrl } from "@/features/editor/utils/photoUtils";
 
 export interface PlaceImageData {
   name: string;
@@ -63,7 +64,7 @@ export function extractFirstTwoPlaceImages(editorData: EditorData): string[] {
         if (firstPhoto.startsWith("http")) {
           imageUrl = firstPhoto;
         } else {
-          imageUrl = `/api/places/photos/${firstPhoto}?width=400`;
+          imageUrl = getPlacePhotoPopupUrl(firstPhoto);
         }
       }
     }

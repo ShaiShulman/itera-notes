@@ -18,7 +18,7 @@ export async function withDirectionsCache<T>(
   places: Array<{ lat: number; lng: number; name?: string }>,
   mode: string = "driving",
   apiCall: () => Promise<T>
-): Promise<T> {
+): Promise<{ result: T; fromCache: boolean }> {
   const key = generateDirectionsKey(places, mode);
   const route = places.map((p) => p.name || `${p.lat},${p.lng}`).join(" → ");
 
@@ -26,14 +26,14 @@ export async function withDirectionsCache<T>(
   const cached = googleAPICache.get<T>(key);
   if (cached !== undefined) {
     console.log(`🗺️ DIRECTIONS (CACHED): ${route} [${mode}]`);
-    return cached;
+    return { result: cached, fromCache: true };
   }
 
   // Call API and cache result
   console.log(`🗺️ DIRECTIONS (API): ${route} [${mode}]`);
   const result = await apiCall();
   googleAPICache.set(key, result, CACHE_TTL.DIRECTIONS);
-  return result;
+  return { result, fromCache: false };
 }
 
 /**
@@ -42,21 +42,21 @@ export async function withDirectionsCache<T>(
 export async function withPlacesSearchCache<T>(
   query: string,
   apiCall: () => Promise<T>
-): Promise<T> {
+): Promise<{ result: T; fromCache: boolean }> {
   const key = generatePlacesKey("search", query);
 
   // Check cache first
   const cached = googleAPICache.get<T>(key);
   if (cached !== undefined) {
     console.log(`📍 PLACES SEARCH (CACHED): "${query}"`);
-    return cached;
+    return { result: cached, fromCache: true };
   }
 
   // Call API and cache result
   console.log(`📍 PLACES SEARCH (API): "${query}"`);
   const result = await apiCall();
   googleAPICache.set(key, result, CACHE_TTL.PLACES_SEARCH);
-  return result;
+  return { result, fromCache: false };
 }
 
 /**
@@ -65,32 +65,32 @@ export async function withPlacesSearchCache<T>(
 export async function withPlaceDetailsCache<T>(
   placeId: string,
   apiCall: () => Promise<T>
-): Promise<T> {
+): Promise<{ result: T; fromCache: boolean }> {
   const key = generatePlacesKey("details", placeId);
 
   // Check cache first
   const cached = googleAPICache.get<T>(key);
   if (cached !== undefined) {
     console.log(`🏢 PLACE DETAILS (CACHED): ${placeId}`);
-    return cached;
+    return { result: cached, fromCache: true };
   }
 
   // Call API and cache result
   console.log(`🏢 PLACE DETAILS (API): ${placeId}`);
   const result = await apiCall();
   googleAPICache.set(key, result, CACHE_TTL.PLACES_DETAILS);
-  return result;
+  return { result, fromCache: false };
 }
 
 /**
  * Cache wrapper for place photos API calls
+ * Now size-agnostic - caches master image only
  */
 export async function withPlacePhotosCache(
   photoReference: string,
-  maxWidth: number,
   apiCall: () => Promise<string>
-): Promise<string> {
-  const key = generatePlacesKey("photos", photoReference, maxWidth.toString());
+): Promise<{ result: string; fromCache: boolean }> {
+  const key = generatePlacesKey("photos", photoReference);
 
   // Check cache first
   const cached = googleAPICache.get<string>(key);
@@ -99,19 +99,19 @@ export async function withPlacePhotosCache(
       `📸 PLACE PHOTO (CACHED): ${photoReference.slice(
         0,
         5
-      )}...${photoReference.slice(-5)}} (${maxWidth}px)`
+      )}...${photoReference.slice(-5)} (master)`
     );
-    return cached;
+    return { result: cached, fromCache: true };
   }
 
   // Call API and cache result
   console.log(
-    `📸 PLACE PHOTO (CACHED): ${photoReference.slice(
+    `📸 PLACE PHOTO (API): ${photoReference.slice(
       0,
       5
-    )}...${photoReference.slice(-5)}} (${maxWidth}px)`
+    )}...${photoReference.slice(-5)} (master)`
   );
   const result = await apiCall();
   googleAPICache.set(key, result, CACHE_TTL.PLACES_PHOTOS);
-  return result;
+  return { result, fromCache: false };
 }

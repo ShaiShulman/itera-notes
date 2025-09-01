@@ -8,10 +8,10 @@ import path from "path";
 
 // Cache TTL constants (in seconds)
 export const CACHE_TTL = {
-  PLACES_SEARCH: 7 * 24 * 60 * 60, // 7 days
-  PLACES_DETAILS: 14 * 24 * 60 * 60, // 14 days
-  PLACES_PHOTOS: 30 * 24 * 60 * 60, // 30 days
-  DIRECTIONS: 3 * 24 * 60 * 60, // 3 days
+  PLACES_SEARCH: 14 * 24 * 60 * 60, // 14 days (increased - search results are stable)
+  PLACES_DETAILS: 30 * 24 * 60 * 60, // 30 days (increased - basic place info is stable)
+  PLACES_PHOTOS: 90 * 24 * 60 * 60, // 90 days (increased - photos rarely change)
+  DIRECTIONS: 7 * 24 * 60 * 60, // 7 days (increased - routes are relatively stable)
 } as const;
 
 interface CacheOptions {

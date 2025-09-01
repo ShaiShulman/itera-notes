@@ -15,6 +15,10 @@ import { findPlaceByNameAction } from "../actions/places";
 import { createImageSkeleton } from "@/components/ui/skeleton";
 import { IconLoader, IconPaths } from "@/assets/icons/iconLoader";
 import { BUTTON_DIMENSIONS, ICON_DIMENSIONS, BUTTON_STYLES } from "./constants";
+import {
+  getPlacePhotoMicroUrl,
+  getPlacePhotoPopupUrl,
+} from "../utils/photoUtils";
 
 // Debounce mechanism for place numbering updates
 let numberingUpdateTimeout: NodeJS.Timeout | null = null;
@@ -609,7 +613,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       "display: flex; align-items: center; flex: 1; gap: 8px;";
 
     // Thumbnail (if available and confirmed)
-    if (!isEditing && this.data.thumbnailUrl) {
+    if (
+      !isEditing &&
+      this.data.thumbnailUrl &&
+      this.data.thumbnailUrl.trim().length > 10
+    ) {
       const thumbnailContainer = document.createElement("div");
       thumbnailContainer.style.cssText = `
         width: 24px;
@@ -619,7 +627,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       `;
 
       const thumbnail = document.createElement("img");
-      thumbnail.src = `/api/places/photos/${this.data.thumbnailUrl}?width=150`;
+      thumbnail.src = getPlacePhotoMicroUrl(this.data.thumbnailUrl);
       thumbnail.style.cssText = `
         width: 24px;
         height: 24px;
@@ -1362,7 +1370,14 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       `;
 
       // Show up to 4 images
-      const imagesToShow = this.data.photoReferences.slice(0, 4);
+      const imagesToShow = this.data.photoReferences
+        .filter(
+          (photoRef) =>
+            photoRef &&
+            typeof photoRef === "string" &&
+            photoRef.trim().length > 10
+        )
+        .slice(0, 4);
 
       imagesToShow.forEach((photoRef) => {
         const imageContainer = document.createElement("div");
@@ -1377,7 +1392,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         `;
 
         const image = document.createElement("img");
-        image.src = `/api/places/photos/${photoRef}?width=400`;
+        image.src = getPlacePhotoPopupUrl(photoRef);
         image.style.cssText = `
           width: 100%;
           height: 100%;
@@ -1409,7 +1424,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
             skeleton.remove();
           }
           image.style.opacity = "1";
-          
+
           // Add eye icon overlay after image loads
           this.createImageOverlay(imageContainer);
         });
@@ -1796,7 +1811,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     // Get the image element and photoRef for popover
     const image = imageContainer.querySelector("img") as HTMLImageElement;
     if (!image) return;
-    
+
     // Extract photoRef from image src
     const photoRefMatch = image.src.match(/\/api\/places\/photos\/([^?]+)/);
     if (!photoRefMatch) return;
@@ -1841,10 +1856,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       if (image.style.opacity === "1") {
         overlay.style.opacity = "1";
         image.style.transform = "scale(1.05)";
-        this.showImagePopover(
-          image,
-          `/api/places/photos/${photoRef}?width=600`
-        );
+        this.showImagePopover(image, getPlacePhotoPopupUrl(photoRef));
       }
     });
 
@@ -2260,7 +2272,9 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       // Dispatch a custom deletion event that the ItineraryEditor can handle
       // This will use the Editor.js blocks.delete(index) API properly
       console.log(
-        `🗑️ PLACE DELETE: "${this.data.name}" linkedParagraphId: ${this.data.linkedParagraphId || "NONE"}`
+        `🗑️ PLACE DELETE: "${this.data.name}" linkedParagraphId: ${
+          this.data.linkedParagraphId || "NONE"
+        }`
       );
       console.log(`🗑️ PLACE DATA KEYS:`, Object.keys(this.data));
       console.log(`🗑️ PLACE DATA:`, JSON.stringify(this.data, null, 2));

@@ -104,7 +104,7 @@ export class GoogleDirectionsService {
     const url = `${baseUrl}?${params.toString()}`;
 
     // Use cache wrapper for the API call
-    const data = await withDirectionsCache(places, "driving", async () => {
+    const { result: data, fromCache } = await withDirectionsCache(places, "driving", async () => {
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -131,6 +131,7 @@ export class GoogleDirectionsService {
           routeFound: false,
           duration,
           status: "success",
+          fromCache,
         });
 
         return FallbackDirectionsService.createFallbackStraightLineResponse(
@@ -154,6 +155,7 @@ export class GoogleDirectionsService {
           routeFound: false,
           duration,
           status: "error",
+          fromCache,
           error: error.message,
         });
 
@@ -186,6 +188,7 @@ export class GoogleDirectionsService {
           : undefined,
         duration,
         status: "success",
+        fromCache,
       });
 
       return data;
@@ -201,6 +204,7 @@ export class GoogleDirectionsService {
         routeFound: false,
         duration,
         status: "error",
+        fromCache: false,
         error: error instanceof Error ? error.message : String(error),
       });
 
