@@ -22,14 +22,19 @@ export async function searchPlacesAction(
 }
 
 export async function getPlaceDetailsAction(
-  placeId: string
+  placeId: string,
+  includeExpensiveFields: boolean = false
 ): Promise<PlaceDetails | null> {
   try {
     if (!placeId) {
       return null;
     }
 
-    const details = await googlePlacesService.getPlaceDetails(placeId);
+    // Include basic info + photos by default for better user experience
+    // Only use truly basic details if explicitly requested
+    const details = includeExpensiveFields 
+      ? await googlePlacesService.getPlaceDetails(placeId, ['ALL'])
+      : await googlePlacesService.getPlaceDetails(placeId, ['BASIC', 'PHOTOS']);
     return details;
   } catch (error) {
     console.error("Get place details action error:", error);
@@ -66,17 +71,18 @@ export async function findPlaceByNameAction(placeName: string): Promise<{
       return { success: false, error: "Place not found" };
     }
 
-    // Get detailed information
+    // Get basic details plus photos for place enrichment
     const placeDetails = await googlePlacesService.getPlaceDetails(
-      placeResult.place_id
+      placeResult.place_id,
+      ['BASIC', 'PHOTOS']
     );
 
     if (!placeDetails) {
       return { success: false, error: "Could not fetch place details" };
     }
-    // Get photo references (not URLs) for client-side API calls
+    // Get photo references (not URLs) for client-side API calls - extract 3 for better visual experience
     const photoReferences = (placeDetails.photos || [])
-      .slice(0, 4)
+      .slice(0, 3)
       .map((photo) => photo.photo_reference);
 
     // Get thumbnail reference for first photo

@@ -341,9 +341,9 @@ export const GoogleMap = React.memo(
         if (placeDetails) {
           console.log("✅ Place details found:", placeDetails.name);
 
-          // Store raw photo references (not URLs)
+          // Store raw photo references (not URLs) - extract 3 for consistency
           const photoReferences = (placeDetails.photos || [])
-            .slice(0, 4)
+            .slice(0, 3)
             .map((photo) => photo.photo_reference);
 
           // Get thumbnail reference for first photo

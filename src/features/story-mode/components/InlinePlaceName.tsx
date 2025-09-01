@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
+import { getPlacePhotoMicroUrl } from "@/features/editor/utils/photoUtils";
 
 export interface InlinePlaceNameProps {
   name: string;
@@ -18,7 +19,6 @@ export const InlinePlaceName: React.FC<InlinePlaceNameProps> = ({
   name,
   shortName,
   thumbnailUrl,
-  placeId,
   dataKey,
   placeType = "place",
   onClick,
@@ -30,19 +30,20 @@ export const InlinePlaceName: React.FC<InlinePlaceNameProps> = ({
   const displayName = shortName || name;
 
   // Define colors based on place type
-  const colors = placeType === "hotel" 
-    ? {
-        background: "bg-violet-50",
-        border: "border-violet-200", 
-        hoverBackground: "hover:bg-violet-100",
-        textColor: "text-violet-700"
-      }
-    : {
-        background: "bg-emerald-50",
-        border: "border-emerald-200",
-        hoverBackground: "hover:bg-emerald-100", 
-        textColor: "text-emerald-700"
-      };
+  const colors =
+    placeType === "hotel"
+      ? {
+          background: "bg-violet-50",
+          border: "border-violet-200",
+          hoverBackground: "hover:bg-violet-100",
+          textColor: "text-violet-700",
+        }
+      : {
+          background: "bg-emerald-50",
+          border: "border-emerald-200",
+          hoverBackground: "hover:bg-emerald-100",
+          textColor: "text-emerald-700",
+        };
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -99,9 +100,11 @@ export const InlinePlaceName: React.FC<InlinePlaceNameProps> = ({
 
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-1 mx-1 ${colors.background} border ${colors.border} rounded-md ${colors.hoverBackground} transition-colors ${
-        onClick ? 'cursor-pointer' : ''
-      }`}
+      className={`inline-flex items-center gap-1 px-2 py-1 mx-1 ${
+        colors.background
+      } border ${colors.border} rounded-md ${
+        colors.hoverBackground
+      } transition-colors ${onClick ? "cursor-pointer" : ""}`}
       data-place-key={dataKey}
       onClick={onClick ? handleClick : undefined}
       onMouseEnter={handleMouseEnter}
@@ -109,24 +112,24 @@ export const InlinePlaceName: React.FC<InlinePlaceNameProps> = ({
       title={shortName ? `${shortName} (${name})` : name}
     >
       {/* Thumbnail */}
-      {thumbnailUrl && placeId && (
+      {thumbnailUrl && thumbnailUrl.trim().length > 10 && (
         <span className="relative inline-block w-4 h-4 flex-shrink-0 overflow-visible">
           {!imageLoaded && !imageError && (
-            <span 
-              className="inline-block bg-gray-200 rounded animate-pulse" 
-              style={{ 
-                width: '20px', 
-                height: '20px',
-                marginTop: '-2px',
-                marginBottom: '-2px',
-                marginLeft: '-2px',
-                marginRight: '-2px'
-              }} 
+            <span
+              className="inline-block bg-gray-200 rounded animate-pulse"
+              style={{
+                width: "20px",
+                height: "20px",
+                marginTop: "-2px",
+                marginBottom: "-2px",
+                marginLeft: "-2px",
+                marginRight: "-2px",
+              }}
             />
           )}
 
           <Image
-            src={`/api/places/photos/${thumbnailUrl}?width=64`}
+            src={getPlacePhotoMicroUrl(thumbnailUrl)}
             alt={displayName}
             width={20}
             height={20}
@@ -143,22 +146,22 @@ export const InlinePlaceName: React.FC<InlinePlaceNameProps> = ({
             }}
             style={{
               position: imageLoaded ? "static" : "absolute",
-              top: imageLoaded ? "auto" : '-2px',
-              left: imageLoaded ? "auto" : '-2px',
-              width: '20px',
-              height: '20px',
-              minWidth: '20px',
-              minHeight: '20px',
-              maxWidth: '20px',
-              maxHeight: '20px',
-              objectFit: 'cover',
-              objectPosition: 'center',
-              borderRadius: '4px',
-              display: 'block',
-              marginTop: '-2px',
-              marginBottom: '-2px',
-              marginLeft: '-2px',
-              marginRight: '-2px'
+              top: imageLoaded ? "auto" : "-2px",
+              left: imageLoaded ? "auto" : "-2px",
+              width: "20px",
+              height: "20px",
+              minWidth: "20px",
+              minHeight: "20px",
+              maxWidth: "20px",
+              maxHeight: "20px",
+              objectFit: "cover",
+              objectPosition: "center",
+              borderRadius: "4px",
+              display: "block",
+              marginTop: "-2px",
+              marginBottom: "-2px",
+              marginLeft: "-2px",
+              marginRight: "-2px",
             }}
             sizes="20px"
           />
