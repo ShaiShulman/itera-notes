@@ -115,6 +115,7 @@ export async function generateItinerary(
         : undefined,
       duration,
       status: "success",
+      fromCache: false,
     });
 
     // Parse the OpenAI response into structured data
@@ -140,6 +141,7 @@ export async function generateItinerary(
       prompt,
       duration,
       status: "error",
+      fromCache: false,
       error: error instanceof Error ? error.message : String(error),
     });
 

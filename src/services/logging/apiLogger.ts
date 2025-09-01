@@ -4,9 +4,10 @@ import path from "path";
 interface BaseApiLog {
   id: string;
   timestamp: Date;
-  service: "openai" | "google-places" | "google-directions";
+  service: "openai" | "google-places" | "google-directions" | "google-photos";
   status: "success" | "error";
   duration: number; // in milliseconds
+  fromCache?: boolean;
   error?: string;
 }
 
@@ -40,7 +41,15 @@ interface GoogleDirectionsApiLog extends BaseApiLog {
   totalDuration?: string;
 }
 
-type ApiLog = OpenAIApiLog | GooglePlacesApiLog | GoogleDirectionsApiLog;
+interface GooglePhotosApiLog extends BaseApiLog {
+  service: "google-photos";
+  photoReference: string;
+  maxWidth: number;
+  photoSizeBytes?: number;
+  contentType?: string;
+}
+
+type ApiLog = OpenAIApiLog | GooglePlacesApiLog | GoogleDirectionsApiLog | GooglePhotosApiLog;
 
 class ApiLogger {
   private logFilePath: string;
@@ -71,6 +80,7 @@ class ApiLogger {
 
   private formatLogEntry(log: ApiLog): string {
     const timestamp = log.timestamp.toISOString();
+    const cacheStatus = log.fromCache ? "CACHED" : "API";
     const status = log.status === "success" ? "SUCCESS" : "ERROR";
     const duration = `${log.duration}ms`;
 
@@ -107,9 +117,20 @@ class ApiLogger {
           details += ` duration=${directionsLog.totalDuration}`;
         }
         break;
+
+      case "google-photos":
+        const photosLog = log as GooglePhotosApiLog;
+        details = `photo_ref=${photosLog.photoReference.slice(0, 8)}... width=${photosLog.maxWidth}`;
+        if (photosLog.photoSizeBytes) {
+          details += ` size=${(photosLog.photoSizeBytes / 1024).toFixed(1)}KB`;
+        }
+        if (photosLog.contentType) {
+          details += ` type=${photosLog.contentType}`;
+        }
+        break;
     }
 
-    let logLine = `[${timestamp}] ${log.service.toUpperCase()} ${status} ${duration} ${details}`;
+    let logLine = `[${timestamp}] ${log.service.toUpperCase()} ${cacheStatus} ${status} ${duration} ${details}`;
 
     if (log.error) {
       logLine += ` ERROR: ${log.error}`;
@@ -129,6 +150,7 @@ class ApiLogger {
     };
     duration: number;
     status: "success" | "error";
+    fromCache?: boolean;
     error?: string;
   }): void {
     const log: OpenAIApiLog = {
@@ -151,6 +173,7 @@ class ApiLogger {
     found: boolean;
     duration: number;
     status: "success" | "error";
+    fromCache?: boolean;
     error?: string;
   }): void {
     const log: GooglePlacesApiLog = {
@@ -177,12 +200,37 @@ class ApiLogger {
     totalDuration?: string;
     duration: number;
     status: "success" | "error";
+    fromCache?: boolean;
     error?: string;
   }): void {
     const log: GoogleDirectionsApiLog = {
       id: this.generateId(),
       timestamp: new Date(),
       service: "google-directions",
+      ...params,
+    };
+
+    const logEntry = this.formatLogEntry(log);
+    this.writeToFile(logEntry);
+
+    // Also log to console for development
+    console.log(`📊 ${logEntry}`);
+  }
+
+  logGooglePhotosCall(params: {
+    photoReference: string;
+    maxWidth: number;
+    photoSizeBytes?: number;
+    contentType?: string;
+    duration: number;
+    status: "success" | "error";
+    fromCache?: boolean;
+    error?: string;
+  }): void {
+    const log: GooglePhotosApiLog = {
+      id: this.generateId(),
+      timestamp: new Date(),
+      service: "google-photos",
       ...params,
     };
 
@@ -203,4 +251,5 @@ export type {
   OpenAIApiLog,
   GooglePlacesApiLog,
   GoogleDirectionsApiLog,
+  GooglePhotosApiLog,
 };
