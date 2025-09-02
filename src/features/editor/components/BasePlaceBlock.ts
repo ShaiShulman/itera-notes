@@ -659,6 +659,9 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
           skeleton.remove();
         }
         thumbnail.style.opacity = "1";
+
+        // Add eye icon overlay after image loads
+        this.createImageOverlay(thumbnailContainer);
       });
 
       thumbnail.addEventListener("error", () => {

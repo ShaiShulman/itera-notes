@@ -11,8 +11,7 @@ function extractShortNameAndCleanParagraph(paragraph: string): {
   // Look for **PlaceName** pattern within the paragraph text
   const match = paragraph.match(/\*\*([^*]+)\*\*/);
   const shortName = match ? match[1] : "";
-  // First trim, then apply cleanString for final cleaning
-  const cleanedParagraph = paragraph.trim(); //cleanString(paragraph.trim()) || "";
+  const cleanedParagraph = paragraph.trim();
   return { shortName, cleanedParagraph };
 }
 
