@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Loader } from "@googlemaps/js-api-loader";
+import Image from "next/image";
 import { MapProps, MapPlace, GoogleMapInstance } from "../types";
 import {
   createNumberedMarkerIcon,
@@ -177,12 +178,37 @@ export const GoogleMap = React.memo(
           // Listen for day-specific bounds fitting
           const handleFitDayBounds = (event: CustomEvent) => {
             const { bounds, maxZoom } = event.detail;
-            console.log("🗺️ GoogleMap: Received fit day bounds event", {
-              bounds,
-              maxZoom,
-            });
+            const timestamp = new Date()
+              .toISOString()
+              .split("T")[1]
+              .split(".")[0];
+            console.log(
+              `📡 [${timestamp}] GoogleMap: Received fit day bounds event`,
+              {
+                bounds,
+                maxZoom,
+              }
+            );
 
             if (bounds) {
+              console.log(`🗺️ [${timestamp}] GoogleMap: Current map state:`, {
+                center: {
+                  lat: map.getCenter()?.lat(),
+                  lng: map.getCenter()?.lng(),
+                },
+                zoom: map.getZoom(),
+                bounds: {
+                  ne: {
+                    lat: map.getBounds()?.getNorthEast().lat(),
+                    lng: map.getBounds()?.getNorthEast().lng(),
+                  },
+                  sw: {
+                    lat: map.getBounds()?.getSouthWest().lat(),
+                    lng: map.getBounds()?.getSouthWest().lng(),
+                  },
+                },
+              });
+
               // Convert bounds to Google Maps LatLngBounds
               const googleBounds = new google.maps.LatLngBounds(
                 new google.maps.LatLng(
@@ -193,6 +219,14 @@ export const GoogleMap = React.memo(
                   bounds.northeast.lat,
                   bounds.northeast.lng
                 )
+              );
+
+              console.log(
+                `🗺️ [${timestamp}] GoogleMap: Applying fitBounds to:`,
+                {
+                  sw: { lat: bounds.southwest.lat, lng: bounds.southwest.lng },
+                  ne: { lat: bounds.northeast.lat, lng: bounds.northeast.lng },
+                }
               );
 
               // Fit bounds with padding
@@ -207,9 +241,12 @@ export const GoogleMap = React.memo(
               if (maxZoom !== undefined) {
                 const checkAndConstrainZoom = () => {
                   const currentZoom = map.getZoom();
+                  console.log(
+                    `🗺️ [${timestamp}] GoogleMap: Post-fitBounds zoom: ${currentZoom}, maxZoom: ${maxZoom}`
+                  );
                   if (currentZoom !== undefined && currentZoom > maxZoom) {
                     console.log(
-                      `🗺️ Constraining zoom from ${currentZoom} to ${maxZoom}`
+                      `🗺️ [${timestamp}] Constraining zoom from ${currentZoom} to ${maxZoom}`
                     );
                     map.setZoom(maxZoom);
                   }
@@ -219,7 +256,11 @@ export const GoogleMap = React.memo(
                 setTimeout(checkAndConstrainZoom, 100);
               }
 
-              console.log("✅ GoogleMap: Applied day bounds fitting");
+              console.log(
+                `✅ [${timestamp}] GoogleMap: Applied day bounds fitting`
+              );
+            } else {
+              console.warn(`⚠️ [${timestamp}] GoogleMap: No bounds provided`);
             }
           };
 
@@ -232,11 +273,16 @@ export const GoogleMap = React.memo(
 
             if (directionsRendererRef.current) {
               // Use the new day-specific styling method
-              directionsRendererRef.current.updateDaySpecificStyles(selectedDayIndex);
-              
+              directionsRendererRef.current.updateDaySpecificStyles(
+                selectedDayIndex
+              );
+
               // If routes are hidden, update visibility based on current state
               if (!routesVisible) {
-                directionsRendererRef.current.setRoutesVisible(false, selectedDayIndex);
+                directionsRendererRef.current.setRoutesVisible(
+                  false,
+                  selectedDayIndex
+                );
               }
             }
           };
@@ -424,7 +470,29 @@ export const GoogleMap = React.memo(
 
       const { map, markers } = mapInstanceRef.current;
 
-      console.log(`🗺️ GoogleMap: Updating ${data.places.length} markers`);
+      // Create a stable hash of the places data to avoid unnecessary marker recreation
+      const placesHash = JSON.stringify(
+        data.places.map((p) => ({
+          uid: p.uid,
+          name: p.name,
+          coordinates: p.coordinates,
+          hideInMap: p.hideInMap,
+        }))
+      );
+
+      // Check if markers need to be recreated
+      const lastPlacesHash = mapInstanceRef.current.lastPlacesHash;
+      if (lastPlacesHash === placesHash) {
+        console.log(
+          `🗺️ GoogleMap: Skipping marker update - places data unchanged`
+        );
+        return;
+      }
+
+      console.log(
+        `🗺️ GoogleMap: Updating ${data.places.length} markers - data changed`
+      );
+      mapInstanceRef.current.lastPlacesHash = placesHash;
 
       // Clear existing markers
       markers.forEach((marker) => marker.setMap(null));
@@ -491,7 +559,6 @@ export const GoogleMap = React.memo(
 
         // Add click listener
         marker.addListener("click", () => {
-          console.log("📍 Marker clicked:", place.name);
           if (onPlaceClick) {
             onPlaceClick(place);
           }
@@ -742,21 +809,28 @@ export const GoogleMap = React.memo(
             const newVisibility = !routesVisible;
             setRoutesVisible(newVisibility);
             if (directionsRendererRef.current) {
-              directionsRendererRef.current.setRoutesVisible(newVisibility, selectedPlace?.dayIndex);
+              directionsRendererRef.current.setRoutesVisible(
+                newVisibility,
+                selectedPlace?.dayIndex
+              );
             }
           }}
           className={`absolute right-4 top-1/2 transform -translate-y-1/2 z-20 flex items-center gap-2 px-3 py-2 ${
-            routesVisible 
-              ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
-              : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
+            routesVisible
+              ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+              : "bg-gray-300 hover:bg-gray-400 text-gray-700"
           } rounded-lg text-sm font-medium transition-colors shadow-lg`}
           title={routesVisible ? "Hide routes" : "Show routes"}
         >
-          <img 
-            src="/icons/route.svg" 
-            alt="Route" 
-            className="w-5 h-5" 
-            style={{ filter: routesVisible ? 'brightness(0) invert(1)' : 'none' }}
+          <Image
+            src="/icons/route.svg"
+            alt="Route"
+            width={20}
+            height={20}
+            className="w-5 h-5"
+            style={{
+              filter: routesVisible ? "brightness(0) invert(1)" : "none",
+            }}
           />
         </button>
 
@@ -846,9 +920,25 @@ export const GoogleMap = React.memo(
       prevProps.selectedPlace?.dayIndex === nextProps.selectedPlace?.dayIndex;
     const classNameEqual = prevProps.className === nextProps.className;
 
-    return (
-      placesEqual && directionsEqual && selectedPlaceEqual && classNameEqual
+    const shouldRerender = !(
+      placesEqual &&
+      directionsEqual &&
+      selectedPlaceEqual &&
+      classNameEqual
     );
+
+    if (shouldRerender) {
+      console.log("🗺️ GoogleMap re-rendering due to:", {
+        placesEqual,
+        directionsEqual,
+        selectedPlaceEqual,
+        classNameEqual,
+        prevSelectedPlace: prevProps.selectedPlace,
+        nextSelectedPlace: nextProps.selectedPlace,
+      });
+    }
+
+    return !shouldRerender;
   }
 );
 
