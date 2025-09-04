@@ -66,6 +66,7 @@ export interface GoogleMapInstance {
   map: google.maps.Map;
   markers: google.maps.Marker[];
   directionsRenderers: google.maps.DirectionsRenderer[]; // New: track directions renderers
+  lastPlacesHash?: string; // Track places data changes to avoid unnecessary marker recreation
 }
 
 // Google Directions API response types

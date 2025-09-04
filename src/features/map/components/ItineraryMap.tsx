@@ -81,23 +81,18 @@ export function ItineraryMap({
 
   const handlePlaceClick = useCallback(
     (place: MapPlace | null) => {
-      console.log("📍 ItineraryMap: Place clicked:", place);
-
       // Handle deselection (place is null)
       if (place === null) {
         setSelectedPlace(null);
-        console.log("📍 ItineraryMap: Deselected all places");
         return;
       }
 
       // Set the selected place in the context
       if (place.uid && place.dayIndex !== undefined) {
-        setSelectedPlace({ uid: place.uid, dayIndex: place.dayIndex });
-        console.log(
-          `📍 ItineraryMap: Set selected place - uid: ${place.uid}, dayIndex: ${place.dayIndex}`
-        );
+        const newSelection = { uid: place.uid, dayIndex: place.dayIndex };
+        setSelectedPlace(newSelection);
 
-        // Emit event for StoryModeView to scroll to place
+        // Emit event for editor to scroll to place
         if (typeof window !== "undefined") {
           const event = new CustomEvent("map:placeClicked", {
             detail: {
@@ -107,28 +102,16 @@ export function ItineraryMap({
             },
           });
           window.dispatchEvent(event);
-          console.log("📡 map:placeClicked event emitted:", {
-            uid: place.uid,
-            name: place.name,
-            dayIndex: place.dayIndex,
-          });
         }
-      } else {
-        console.warn(
-          "📍 ItineraryMap: Place clicked but missing uid or dayIndex:",
-          place
-        );
       }
     },
-    [setSelectedPlace]
+    [setSelectedPlace, selectedPlace]
   );
 
   const handleMapReady = useCallback((map: google.maps.Map) => {
     console.log("Map ready:", map);
     // Store map reference if needed for future operations
   }, []);
-
-  console.log("ItineraryMap: About to render GoogleMap with data:", mapData);
 
   return (
     <div className={`relative ${className}`}>
@@ -174,8 +157,8 @@ export function ItineraryMap({
                   className="flex items-center gap-2 text-xs"
                 >
                   <div
-                    className="w-3 h-3 rounded-full border border-white shadow-sm flex-shrink-0"
-                    style={{ backgroundColor: day.color }}
+                    className="w-3 h-3 rounded-full border border-white shadow-sm flex-shrink-0 day-color-indicator"
+                    data-day-color={day.color}
                     aria-label={`Day color: ${day.color}`}
                   />
                   <span className="text-slate-600 truncate">

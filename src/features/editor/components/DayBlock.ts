@@ -12,6 +12,10 @@ export default class DayBlock {
   private originalTitle: string = "";
   private isCurrentlyEditingTitle: boolean = false;
   private currentTitleValue: string = "";
+  
+  // Debounced auto-save for title changes
+  private titleSaveTimeout: NodeJS.Timeout | null = null;
+  private readonly TITLE_SAVE_DELAY = 1000; // 1 second delay
 
   static get toolbox() {
     return {
@@ -107,6 +111,17 @@ export default class DayBlock {
     this.wrapper.addEventListener("click", (e) => {
       e.stopPropagation();
       this.toggle();
+    });
+
+    // Add hover event listeners for map integration
+    this.wrapper.addEventListener("mouseenter", (e) => {
+      e.stopPropagation();
+      this.handleMouseEnter();
+    });
+
+    this.wrapper.addEventListener("mouseleave", (e) => {
+      e.stopPropagation();
+      this.handleMouseLeave();
     });
 
     return this.wrapper;
@@ -450,7 +465,10 @@ export default class DayBlock {
     `;
     titleInput.addEventListener("input", (e) => {
       this.currentTitleValue = (e.target as HTMLInputElement).value;
-      // Don't update this.data.title until Enter is pressed
+      this.data.title = this.currentTitleValue; // Update immediately
+      
+      // Trigger EditorJS onChange to save to database
+      this.triggerEditorChange();
     });
 
     titleInput.addEventListener("click", (e) => {
@@ -547,47 +565,6 @@ export default class DayBlock {
       }
     });
 
-    // Region input
-    const regionLabel = document.createElement("label");
-    regionLabel.style.cssText = `
-      display: block;
-      color: #1e40af;
-      font-size: 14px;
-      font-weight: 500;
-      margin-bottom: 4px;
-    `;
-    regionLabel.textContent = "Region/City:";
-
-    const regionInput = document.createElement("input");
-    regionInput.type = "text";
-    regionInput.placeholder = "Enter region or city...";
-    regionInput.value = this.data.region || "";
-    regionInput.style.cssText = `
-      border: 1px solid #93c5fd;
-      border-radius: 6px;
-      padding: 8px 12px;
-      background: white;
-      color: #1e40af;
-      font-size: 14px;
-      margin-bottom: 16px;
-      width: 100%;
-    `;
-    regionInput.addEventListener("change", (e) => {
-      this.data.region = (e.target as HTMLInputElement).value;
-    });
-
-    regionInput.addEventListener("click", (e) => {
-      e.stopPropagation();
-    });
-
-    // Add Enter key handler for region input
-    regionInput.addEventListener("keypress", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        e.stopPropagation();
-        this.saveAndCollapse();
-      }
-    });
 
     // Save button container (positioned bottom right)
     const saveButtonContainer = document.createElement("div");
@@ -643,8 +620,6 @@ export default class DayBlock {
     this.wrapper.appendChild(titleInput);
     this.wrapper.appendChild(dateLabel);
     this.wrapper.appendChild(dateInput);
-    this.wrapper.appendChild(regionLabel);
-    this.wrapper.appendChild(regionInput);
     this.wrapper.appendChild(saveButtonContainer);
 
     // Focus title input after rendering
@@ -666,6 +641,42 @@ export default class DayBlock {
     }
   }
 
+  private triggerEditorChange() {
+    // Clear any existing timeout
+    if (this.titleSaveTimeout) {
+      clearTimeout(this.titleSaveTimeout);
+      this.titleSaveTimeout = null;
+    }
+    
+    // Set up debounced save - only save after user stops typing for TITLE_SAVE_DELAY
+    this.titleSaveTimeout = setTimeout(() => {
+      if (this.wrapper) {
+        // First try to find the EditorJS block container
+        const editorBlock = this.wrapper.closest('.ce-block');
+        if (editorBlock) {
+          // Dispatch both input and change events to ensure EditorJS detects the change
+          const inputEvent = new Event("input", { bubbles: true });
+          const changeEvent = new Event("change", { bubbles: true });
+          
+          editorBlock.dispatchEvent(inputEvent);
+          editorBlock.dispatchEvent(changeEvent);
+          
+          console.log(`DayBlock: Triggered EditorJS change events for title update (debounced)`);
+        } else {
+          // Fallback: dispatch on the wrapper itself
+          const changeEvent = new Event("input", { bubbles: true });
+          this.wrapper.dispatchEvent(changeEvent);
+          
+          console.log(`DayBlock: Triggered fallback change event for title update (debounced)`);
+        }
+      }
+      
+      this.titleSaveTimeout = null;
+    }, this.TITLE_SAVE_DELAY);
+    
+    console.log(`DayBlock: Scheduled debounced save for title change in ${this.TITLE_SAVE_DELAY}ms`);
+  }
+
   private toggle() {
     this.isExpanded = !this.isExpanded;
     if (this.isExpanded) {
@@ -682,23 +693,145 @@ export default class DayBlock {
     const dateInput = blockContent.querySelector(
       'input[type="date"]'
     ) as HTMLInputElement;
-    const regionInput = blockContent.querySelector(
-      'input[placeholder="Enter region or city..."]'
-    ) as HTMLInputElement;
 
     return {
       dayNumber: this.actualDayNumber, // Use auto-calculated number
       title: titleInput?.value || this.data.title || "",
       date: dateInput?.value || this.data.date || "",
-      region: regionInput?.value || this.data.region || "",
+      region: this.data.region || "", // Keep existing region data if any
     };
   }
 
-  // Add cleanup method for the observer
+  // Mouse hover handlers for map integration
+  private handleMouseEnter() {
+    // Only emit hover events if not in editing mode
+    if (this.isCurrentlyEditingTitle) {
+      return;
+    }
+
+    console.log(`DayBlock: Mouse entered Day ${this.actualDayNumber}`);
+    this.emitDayHoverEvent(true);
+  }
+
+  private handleMouseLeave() {
+    // Only emit hover events if not in editing mode
+    if (this.isCurrentlyEditingTitle) {
+      return;
+    }
+
+    console.log(`DayBlock: Mouse left Day ${this.actualDayNumber}`);
+    this.emitDayHoverEvent(false);
+  }
+
+  // Emit day hover events for map integration
+  private emitDayHoverEvent(isHovering: boolean) {
+    if (isHovering) {
+      // Find all places in this day for the hover event
+      const dayPlaces = this.findPlacesInDay();
+      
+      // Emit editor:dayHover event
+      const event = new CustomEvent("editor:dayHover", {
+        detail: {
+          dayNumber: this.actualDayNumber,
+          places: dayPlaces,
+        },
+        bubbles: true,
+      });
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(event);
+        console.log(`📡 editor:dayHover event emitted:`, {
+          dayNumber: this.actualDayNumber,
+          placeCount: dayPlaces.length,
+        });
+      }
+    } else {
+      // Emit editor:hoverEnd event
+      const event = new CustomEvent("editor:hoverEnd", {
+        detail: {},
+        bubbles: true,
+      });
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(event);
+        console.log(`📡 editor:hoverEnd event emitted from day`);
+      }
+    }
+  }
+
+  // Helper method to find all places in this day
+  private findPlacesInDay(): any[] {
+    if (!this.wrapper) return [];
+
+    const editorElement = this.wrapper.closest(".codex-editor");
+    if (!editorElement) return [];
+
+    const allBlocks = editorElement.querySelectorAll(".ce-block");
+    const places: any[] = [];
+    let currentDay = 0;
+    let foundThisDay = false;
+
+    // Find all place and hotel blocks that belong to this day
+    for (let i = 0; i < allBlocks.length; i++) {
+      const block = allBlocks[i];
+
+      // Check if this block contains a day block
+      if (block.querySelector(".day-block")) {
+        currentDay++;
+        
+        // Check if this is our day block
+        if (block.contains(this.wrapper)) {
+          foundThisDay = true;
+        }
+      } else if (foundThisDay && currentDay === this.actualDayNumber) {
+        // Check if this is a place or hotel block
+        const placeBlock = block.querySelector(".place-block, .hotel-block");
+        if (placeBlock) {
+          // Extract place data from the DOM
+          const uid = placeBlock.getAttribute("data-uid");
+          const lat = placeBlock.getAttribute("data-lat");
+          const lng = placeBlock.getAttribute("data-lng");
+          const nameElement = placeBlock.querySelector("[data-place-name]") || 
+                             placeBlock.querySelector(".place-name") ||
+                             placeBlock.textContent;
+
+          if (uid && lat && lng) {
+            places.push({
+              uid: uid,
+              name: typeof nameElement === "string" ? nameElement : (nameElement?.textContent || "Unknown Place"),
+              lat: parseFloat(lat),
+              lng: parseFloat(lng),
+              __type: placeBlock.classList.contains("hotel-block") ? "hotel" : "place",
+            });
+          }
+        }
+      } else if (foundThisDay && currentDay > this.actualDayNumber) {
+        // We've moved past this day, stop searching
+        break;
+      }
+    }
+
+    console.log(`DayBlock: Found ${places.length} places for Day ${this.actualDayNumber}:`, places.map(p => ({ 
+      uid: p.uid, 
+      name: p.name, 
+      lat: p.lat, 
+      lng: p.lng,
+      hasCoords: !!(p.lat && p.lng)
+    })));
+    return places;
+  }
+
+  // Add cleanup method for the observer and timers
   destroy() {
     if (this.orderObserver) {
       this.orderObserver.disconnect();
       this.orderObserver = null;
+    }
+    
+    // Clean up title save timeout
+    if (this.titleSaveTimeout) {
+      clearTimeout(this.titleSaveTimeout);
+      this.titleSaveTimeout = null;
     }
   }
 

@@ -14,11 +14,18 @@ export interface LocationBias {
   radius?: number;
 }
 
+// Store current bounds to avoid unnecessary updates
+let currentMapBounds: MapBounds | null = null;
+let lastProcessedDay: number | null = null;
+
 /**
  * Emit a DOM event with map bounds data
  */
 export function emitMapBoundsChanged(bounds: MapBounds): void {
   if (typeof window === 'undefined') return;
+  
+  // Update current bounds tracking when map bounds change from any source
+  currentMapBounds = bounds;
   
   const event = new CustomEvent('map:boundsChanged', {
     detail: { bounds }
@@ -196,20 +203,74 @@ export function calculateDayBounds(
 }
 
 /**
+ * Compare two bounds to see if they are similar enough to avoid flickering
+ */
+function areBoundsSimilar(bounds1: MapBounds, bounds2: MapBounds, threshold = 0.1): boolean {
+  const latDiff1 = Math.abs(bounds1.northeast.lat - bounds2.northeast.lat);
+  const latDiff2 = Math.abs(bounds1.southwest.lat - bounds2.southwest.lat);
+  const lngDiff1 = Math.abs(bounds1.northeast.lng - bounds2.northeast.lng);
+  const lngDiff2 = Math.abs(bounds1.southwest.lng - bounds2.southwest.lng);
+  
+  const maxDiff = Math.max(latDiff1, latDiff2, lngDiff1, lngDiff2);
+  
+  console.log('🗺️ Bounds comparison:', {
+    maxDiff: maxDiff.toFixed(6),
+    threshold: threshold,
+    similar: maxDiff < threshold,
+    diffs: {
+      neLat: latDiff1.toFixed(6),
+      swLat: latDiff2.toFixed(6), 
+      neLng: lngDiff1.toFixed(6),
+      swLng: lngDiff2.toFixed(6)
+    }
+  });
+  
+  return maxDiff < threshold;
+}
+
+/**
  * Emit a custom event to fit map to specific bounds with optional maxZoom constraint
+ * Includes bounds comparison to prevent flickering when bounds are very similar
  */
 export function emitFitDayBounds(
   bounds: MapBounds,
-  maxZoom?: number
+  maxZoom?: number,
+  dayNumber?: number
 ): void {
   if (typeof window === 'undefined') return;
+  
+  // Check if we're processing the same day as last time
+  if (dayNumber && lastProcessedDay === dayNumber) {
+    console.log('🗺️ Skipping bounds update - same day as last processed:', dayNumber);
+    return;
+  }
+  
+  // Check if the new bounds are similar to current bounds
+  if (currentMapBounds && areBoundsSimilar(currentMapBounds, bounds)) {
+    console.log('🗺️ Skipping bounds update - new bounds are similar to current bounds');
+    return;
+  }
+  
+  // Update tracking
+  currentMapBounds = bounds;
+  if (dayNumber) {
+    lastProcessedDay = dayNumber;
+  }
   
   const event = new CustomEvent('map:fitDayBounds', {
     detail: { bounds, maxZoom }
   });
   
   window.dispatchEvent(event);
-  console.log('🗺️ Fit day bounds event emitted:', { bounds, maxZoom });
+  console.log('🗺️ Fit day bounds event emitted:', { bounds, maxZoom, dayNumber });
+}
+
+/**
+ * Reset day tracking to allow bounds updates for different days
+ */
+export function resetDayTracking(): void {
+  lastProcessedDay = null;
+  console.log('🗺️ Day tracking reset - next bounds update will be allowed');
 }
 
 /**

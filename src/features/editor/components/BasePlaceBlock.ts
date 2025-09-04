@@ -19,6 +19,7 @@ import {
   getPlacePhotoMicroUrl,
   getPlacePhotoPopupUrl,
 } from "../utils/photoUtils";
+import { getDayColor } from "@/features/map/utils/colors";
 
 // Debounce mechanism for place numbering updates
 let numberingUpdateTimeout: NodeJS.Timeout | null = null;
@@ -460,6 +461,17 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       }
     });
 
+    // Add hover event listeners for map integration
+    this.wrapper.addEventListener("mouseenter", (e) => {
+      e.stopPropagation();
+      this.handleMouseEnter();
+    });
+
+    this.wrapper.addEventListener("mouseleave", (e) => {
+      e.stopPropagation(); 
+      this.handleMouseLeave();
+    });
+
     return this.wrapper;
   }
 
@@ -473,6 +485,9 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     this.currentInputValue = this.data.name || "";
     this.isCurrentlyEditingName = true;
     console.log(`${this.blockType}: Started editing "${this.originalName}"`);
+
+    // Emit hover event when entering edit mode (requirement #4)
+    this.emitPlaceHoverEvent(true);
   }
 
   private commitEdit(): void {
@@ -504,6 +519,40 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       this.currentInputValue &&
       this.currentInputValue !== this.originalName
     );
+  }
+
+  protected calculateDayIndex(): number {
+    // Find which day (0-based index) this place belongs to
+    const editorElement = this.wrapper?.closest(".codex-editor");
+    if (!editorElement) {
+      return 0; // Default to day 0 if no editor found
+    }
+
+    const allBlocks = editorElement.querySelectorAll(".ce-block");
+    let dayIndex = -1; // Start at -1, will be incremented to 0 when first day block is found
+    let foundCurrentPlace = false;
+
+    // Find all blocks and track day progression until we reach this place
+    for (let i = 0; i < allBlocks.length; i++) {
+      const block = allBlocks[i];
+
+      // Check if this block contains a day block first
+      if (block.querySelector(".day-block")) {
+        dayIndex++; // Increment for each day block found
+      }
+      // Check if this block contains our place block  
+      else if (block.querySelector(`.${this.blockType.toLowerCase()}-block`)) {
+        const blockElement = block.querySelector(`.${this.blockType.toLowerCase()}-block`);
+        const isCurrentBlock = blockElement && blockElement.contains(this.wrapper);
+
+        if (isCurrentBlock) {
+          foundCurrentPlace = true;
+          break;
+        }
+      }
+    }
+
+    return foundCurrentPlace ? dayIndex : 0;
   }
 
   protected calculatePlaceNumber(): number {
@@ -588,11 +637,13 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     const leftContent = document.createElement("div");
     leftContent.style.cssText = "display: flex; align-items: center;";
 
-    // Place number badge (circular)
+    // Place number badge (circular) - use day color
     const placeNumber = this.calculatePlaceNumber();
+    const dayIndex = this.calculateDayIndex();
+    const dayColor = getDayColor(dayIndex);
     const numberBadge = document.createElement("div");
     numberBadge.style.cssText = `
-      background: ${this.primaryColor};
+      background: ${dayColor};
       color: white;
       width: 24px;
       height: 24px;
@@ -1241,9 +1292,11 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
 
     // Place number badge (circular) - keep when expanded
     const placeNumber = this.calculatePlaceNumber();
+    const dayIndex = this.calculateDayIndex();
+    const dayColor = getDayColor(dayIndex);
     const numberBadge = document.createElement("div");
     numberBadge.style.cssText = `
-      background: ${this.primaryColor};
+      background: ${dayColor};
       color: white;
       width: 24px;
       height: 24px;
@@ -2405,6 +2458,98 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         isSelected ? "selected" : "deselected"
       })`
     );
+  }
+
+  // Mouse hover handlers for map integration
+  private handleMouseEnter() {
+    // Don't emit hover events when in editing mode
+    if (this.isCurrentlyEditing()) {
+      return;
+    }
+
+    // Only emit hover events for places with valid data
+    if (!this.data.uid || !this.data.name) {
+      return;
+    }
+
+    console.log(`📍 ${this.blockType}: Mouse entered ${this.data.name}`);
+    this.emitPlaceHoverEvent(true);
+  }
+
+  private handleMouseLeave() {
+    // Don't emit hover events when in editing mode
+    if (this.isCurrentlyEditing()) {
+      return;
+    }
+
+    // Only emit hover events for places with valid data
+    if (!this.data.uid || !this.data.name) {
+      return;
+    }
+
+    console.log(`📍 ${this.blockType}: Mouse left ${this.data.name}`);
+    this.emitPlaceHoverEvent(false);
+  }
+
+  // Emit place hover events for map integration
+  private emitPlaceHoverEvent(isHovering: boolean) {
+    if (!this.data.uid || !this.data.name) return;
+
+    // Find the day number by looking at the DOM structure
+    const dayNumber = this.findDayNumber();
+    
+    if (isHovering) {
+      // Emit editor:placeHover event
+      const event = new CustomEvent("editor:placeHover", {
+        detail: {
+          place: {
+            uid: this.data.uid,
+            name: this.data.name,
+            lat: this.data.lat,
+            lng: this.data.lng,
+            address: this.data.address,
+            rating: this.data.rating,
+            photoReferences: this.data.photoReferences,
+            description: this.data.description,
+            thumbnailUrl: this.data.thumbnailUrl,
+            __type: this.blockType,
+          },
+          dayNumber: dayNumber,
+        },
+        bubbles: true,
+      });
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(event);
+        console.log(`📡 editor:placeHover event emitted:`, {
+          placeName: this.data.name,
+          dayNumber: dayNumber,
+        });
+      }
+    } else {
+      // Emit editor:hoverEnd event
+      const event = new CustomEvent("editor:hoverEnd", {
+        detail: {},
+        bubbles: true,
+      });
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(event);
+        console.log(`📡 editor:hoverEnd event emitted from place`);
+      }
+    }
+  }
+
+  // Helper method to find the day number for this place
+  private findDayNumber(): number {
+    if (!this.wrapper) return 1;
+
+    // Use the same logic as calculateDayIndex() but return 1-based day number
+    const dayIndex = this.calculateDayIndex();
+    const dayNumber = dayIndex + 1; // Convert 0-based index to 1-based day number
+
+    console.log(`📍 ${this.blockType}: Found day number ${dayNumber} (dayIndex: ${dayIndex}) for ${this.data.name}`);
+    return dayNumber;
   }
 
   protected toggle() {

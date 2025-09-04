@@ -86,7 +86,7 @@ function findInsertionPointAfterDay(
     }
   }
 
-  // If adding a place, find optimal position: after places, before hotels
+  // If adding a place, find optimal position: after places and their paragraphs, before hotels
   if (blockType === "place") {
     let lastPlaceIndex = dayBlockIndex; // Start after the day block
     let firstHotelIndex = nextDayIndex; // Default to end of day
@@ -105,10 +105,32 @@ function findInsertionPointAfterDay(
       }
     }
 
-    // Insert after the last place but before the first hotel
-    const insertIndex = lastPlaceIndex + 1;
+    // After finding the last place, look for paragraph blocks that come after it
+    let lastParagraphAfterPlace = lastPlaceIndex; // Default to last place position
+
+    // Scan from after the last place to before the first hotel for paragraph blocks
+    for (let i = lastPlaceIndex + 1; i < firstHotelIndex; i++) {
+      const block = allBlocks[i];
+
+      // Check if this is a paragraph block (EditorJS paragraph blocks have .ce-paragraph class)
+      if (
+        block.querySelector(".ce-paragraph") ||
+        block.classList.contains("ce-block")
+      ) {
+        // Additional check to ensure it's actually a paragraph block type
+        const blockContent =
+          block.querySelector("[data-tool='paragraph']") ||
+          block.querySelector(".ce-paragraph");
+        if (blockContent) {
+          lastParagraphAfterPlace = i; // Track the last paragraph after places
+        }
+      }
+    }
+
+    // Insert after the last paragraph (if any) or last place, but before the first hotel
+    const insertIndex = lastParagraphAfterPlace + 1;
     console.log(
-      `findInsertionPointAfterDay: Inserting place at index ${insertIndex} (after last place at ${lastPlaceIndex}, before first hotel at ${firstHotelIndex})`
+      `findInsertionPointAfterDay: Inserting place at index ${insertIndex} (after last place at ${lastPlaceIndex}, after last paragraph at ${lastParagraphAfterPlace}, before first hotel at ${firstHotelIndex})`
     );
     return Math.min(insertIndex, firstHotelIndex);
   }
@@ -265,6 +287,121 @@ async function extractPlacesFromDay(
   }
 }
 
+// Helper function to scroll to and focus newly inserted blocks
+function scrollToAndFocusBlock(
+  holderRef: React.RefObject<HTMLDivElement | null>,
+  blockType: string,
+  insertionIndex: number
+) {
+  // Wait for DOM to update before scrolling and focusing
+  setTimeout(() => {
+    if (!holderRef.current) return;
+
+    // Find all blocks in the editor
+    const allBlocks = holderRef.current.querySelectorAll(".ce-block");
+
+    if (insertionIndex >= 0 && insertionIndex < allBlocks.length) {
+      const newBlock = allBlocks[insertionIndex] as HTMLElement;
+
+      console.log(
+        `📍 Scrolling to newly inserted ${blockType} block at index ${insertionIndex}`
+      );
+
+      // Scroll the block into view first
+      newBlock.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+
+      // Focus appropriate element based on block type after scroll starts
+      setTimeout(() => {
+        focusBlockElement(newBlock, blockType);
+      }, 200);
+    } else {
+      console.warn(
+        `Could not find block at index ${insertionIndex} for ${blockType}`
+      );
+    }
+  }, 100);
+}
+
+// Helper function to focus the appropriate element within a block
+function focusBlockElement(blockElement: HTMLElement, blockType: string) {
+  let focusTarget: HTMLElement | null = null;
+
+  switch (blockType) {
+    case "place":
+    case "hotel":
+      // Place/hotel blocks handle their own focus in editing mode
+      // The input will be focused automatically when they render in editing mode
+      console.log(`📍 ${blockType} block will auto-focus in editing mode`);
+      return;
+
+    case "paragraph":
+      // Focus the contenteditable div for paragraph blocks
+      focusTarget = blockElement.querySelector(
+        '[contenteditable="true"]'
+      ) as HTMLElement;
+      break;
+
+    case "header":
+      // Focus the input field for header blocks
+      focusTarget = blockElement.querySelector(
+        'input[type="text"]'
+      ) as HTMLElement;
+      if (!focusTarget) {
+        // Fallback: try contenteditable div
+        focusTarget = blockElement.querySelector(
+          '[contenteditable="true"]'
+        ) as HTMLElement;
+      }
+      break;
+
+    case "day":
+      // Focus the date input for day blocks
+      focusTarget = blockElement.querySelector(
+        'input[type="date"]'
+      ) as HTMLElement;
+      if (!focusTarget) {
+        // Fallback: try any input in the day block
+        focusTarget = blockElement.querySelector("input") as HTMLElement;
+      }
+      break;
+
+    default:
+      // For unknown block types, try to find any focusable element
+      focusTarget = blockElement.querySelector(
+        'input, [contenteditable="true"], textarea'
+      ) as HTMLElement;
+      break;
+  }
+
+  if (focusTarget) {
+    try {
+      focusTarget.focus();
+
+      // For contenteditable elements, place cursor at the end
+      if (focusTarget.hasAttribute("contenteditable")) {
+        // Place cursor at the end of contenteditable element
+        const range = document.createRange();
+        const selection = window.getSelection();
+        if (selection) {
+          range.selectNodeContents(focusTarget);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }
+
+      console.log(`📍 Focused ${blockType} block element:`, focusTarget);
+    } catch (error) {
+      console.warn(`Could not focus ${blockType} block element:`, error);
+    }
+  } else {
+    console.log(`📍 No focusable element found for ${blockType} block`);
+  }
+}
+
 export default function ItineraryEditor({
   data,
   onChange,
@@ -398,56 +535,71 @@ export default function ItineraryEditor({
     [state.currentItinerary, updateDay]
   );
 
+  // Function to check if routes are currently visible
+  const areRoutesVisible = useCallback((): boolean => {
+    const routeButton = document.querySelector(
+      'button[title*="Hide routes"], button[title*="Show routes"]'
+    ) as HTMLButtonElement;
+    return routeButton && routeButton.title.includes("Hide routes");
+  }, []);
+
   // Function to trigger day-specific bounds calculation with maxZoom constraint
   const triggerDayBounds = useCallback(async (dayNumber: number) => {
+    const timestamp = new Date().toISOString().split("T")[1].split(".")[0];
     console.log(
-      `🗺️ ItineraryEditor: Triggering day bounds for day ${dayNumber}`
+      `🗺️ [${timestamp}] ItineraryEditor: Triggering day bounds for day ${dayNumber}`
     );
 
     try {
       // Extract places from the specific day
+      console.log(
+        `🗺️ [${timestamp}] Extracting places for day ${dayNumber}...`
+      );
       const dayPlaces = await extractPlacesFromDay(editorRef, dayNumber);
+      console.log(
+        `🗺️ [${timestamp}] Extracted ${dayPlaces.length} places:`,
+        dayPlaces.map((p) => ({ name: p.name, lat: p.lat, lng: p.lng }))
+      );
 
       if (dayPlaces.length === 0) {
         console.log(
-          `🗺️ No places found for day ${dayNumber}, skipping bounds update`
+          `🗺️ [${timestamp}] No places found for day ${dayNumber}, skipping bounds update`
         );
         return;
       }
 
       // Calculate bounds for the day's places
+      console.log(`🗺️ [${timestamp}] Calculating bounds...`);
       const bounds = calculateDayBounds(dayPlaces);
+      console.log(`🗺️ [${timestamp}] Calculated bounds:`, bounds);
 
       if (bounds) {
         // Emit event to fit map to day bounds with maxZoom constraint
-        emitFitDayBounds(bounds, MAX_ZOOM_LEVEL);
+        console.log(
+          `🗺️ [${timestamp}] Calling emitFitDayBounds with day ${dayNumber}...`
+        );
+        emitFitDayBounds(bounds, MAX_ZOOM_LEVEL, dayNumber);
+      } else {
+        console.warn(
+          `🗺️ [${timestamp}] Failed to calculate bounds for day ${dayNumber}`
+        );
       }
     } catch (error) {
       console.error(
-        `Error calculating day bounds for day ${dayNumber}:`,
+        `🗺️ [${timestamp}] Error calculating day bounds for day ${dayNumber}:`,
         error
       );
     }
   }, []);
 
-  // Function to find and expand a place block by uid
-  const findAndExpandPlace = useCallback((uid: string) => {
+  // Function to find and scroll to a place block by uid (without expanding)
+  const findAndScrollToPlace = useCallback((uid: string) => {
     if (!holderRef.current) return;
 
     // Find all place and hotel blocks in the editor
     const placeBlocks = holderRef.current.querySelectorAll(
       ".place-block, .hotel-block"
     );
-
-    // First, collapse all place and hotel blocks
-    placeBlocks.forEach((block) => {
-      const blockElement = block as HTMLElement;
-      // Try to find the PlaceBlock/HotelBlock instance and collapse it
-      // We'll emit a custom event to handle this
-      blockElement.dispatchEvent(
-        new CustomEvent("place:forceCollapse", { bubbles: true })
-      );
-    });
 
     // Find the target place block by uid
     let targetBlock: HTMLElement | null = null;
@@ -470,20 +622,13 @@ export default function ItineraryEditor({
         block: "center",
       });
 
-      // Expand the target block after a short delay to ensure scrolling completes
+      // Briefly highlight the element with yellow background
+      (targetBlock as HTMLElement).style.backgroundColor = "#fef3c7";
+      (targetBlock as HTMLElement).style.transition =
+        "background-color 0.3s ease";
       setTimeout(() => {
-        targetBlock!.dispatchEvent(
-          new CustomEvent("place:forceExpand", { bubbles: true })
-        );
-      }, 300);
-
-      console.log(
-        `📍 ItineraryEditor: Found and expanded place with uid: ${uid}`
-      );
-    } else {
-      console.warn(
-        `📍 ItineraryEditor: Could not find place block with uid: ${uid}`
-      );
+        (targetBlock as HTMLElement).style.backgroundColor = "";
+      }, 1500);
     }
   }, []);
 
@@ -493,23 +638,14 @@ export default function ItineraryEditor({
       console.log(
         `📍 ItineraryEditor: Place selected from context: ${selectedPlace.uid}`
       );
-      findAndExpandPlace(selectedPlace.uid);
+      // Note: Removed findAndExpandPlace() call to prevent hover-triggered expansions
+      // Place selection now only affects map marker highlighting, not editor expansion
     } else {
-      console.log("📍 ItineraryEditor: No place selected, collapsing all");
-      // Collapse all place and hotel blocks when no place is selected
-      if (holderRef.current) {
-        const placeBlocks = holderRef.current.querySelectorAll(
-          ".place-block, .hotel-block"
-        );
-        placeBlocks.forEach((block) => {
-          const blockElement = block as HTMLElement;
-          blockElement.dispatchEvent(
-            new CustomEvent("place:forceCollapse", { bubbles: true })
-          );
-        });
-      }
+      console.log("📍 ItineraryEditor: No place selected, clearing selection");
+      // Note: Removed force collapse logic to prevent hover-triggered collapses
+      // Places should only expand/collapse via direct user clicks, not hover effects
     }
-  }, [selectedPlace, findAndExpandPlace]);
+  }, [selectedPlace]);
 
   // Refresh directions function
   const refreshDirections = useCallback(async (): Promise<{
@@ -682,12 +818,19 @@ export default function ItineraryEditor({
                     `ItineraryEditor: Inserted ${blockType} at index ${insertionIndex} with data:`,
                     initialData
                   );
+
+                  // Scroll to and focus the newly inserted block
+                  scrollToAndFocusBlock(holderRef, blockType, insertionIndex);
                 } else {
                   // Fallback: insert at the end
                   console.log(
                     `ItineraryEditor: Fallback - inserting ${blockType} at end`
                   );
+                  const totalBlocks = editorRef.current.blocks.getBlocksCount();
                   editorRef.current.blocks.insert(blockType, initialData || {});
+
+                  // Scroll to and focus the newly inserted block at the end
+                  scrollToAndFocusBlock(holderRef, blockType, totalBlocks);
                 }
 
                 // Trigger place numbering update after any place or hotel block is added
@@ -711,8 +854,7 @@ export default function ItineraryEditor({
 
               if (isSelected) {
                 setSelectedPlace({ uid, dayIndex });
-                // Trigger day-specific bounds calculation when a place is selected
-                triggerDayBounds(dayNumber || dayIndex || 1);
+                // Note: Removed triggerDayBounds() call - map bounds should only change on hover, not on expand
               } else {
                 setSelectedPlace(null);
               }
@@ -864,8 +1006,11 @@ export default function ItineraryEditor({
                 }
               }
 
-              // Highlight this day's directions (thick lines) and dim others (thin lines)
-              emitDirectionStyleUpdate(dayNumber - 1); // Convert to 0-based dayIndex
+              // Only update direction styles if routes are currently visible
+              if (areRoutesVisible()) {
+                // Highlight this day's directions (thick lines) and dim others (thin lines)
+                emitDirectionStyleUpdate(dayNumber - 1); // Convert to 0-based dayIndex
+              }
             };
 
             const handleStoryPlaceHover = (event: CustomEvent) => {
@@ -883,8 +1028,9 @@ export default function ItineraryEditor({
                 });
               }
 
-              // Highlight this day's directions (thick lines) and dim others (thin lines)
-              if (dayNumber) {
+              // Only update direction styles if routes are currently visible
+              if (areRoutesVisible() && dayNumber) {
+                // Highlight this day's directions (thick lines) and dim others (thin lines)
                 emitDirectionStyleUpdate(dayNumber - 1); // Convert to 0-based dayIndex
               }
             };
@@ -895,8 +1041,125 @@ export default function ItineraryEditor({
               // Clear selected place
               setSelectedPlace(null);
 
-              // Reset all direction lines to normal thickness (no highlighted day)
-              emitDirectionStyleUpdate(); // No dayIndex = reset all to normal
+              // Note: Do NOT reset direction styles on story mode hover-out - maintain current day highlighting
+              // Direction styles should only be reset when explicitly needed, not on every hover-out
+            };
+
+            // Add event listener for map place clicks
+            const handleMapPlaceClick = (event: CustomEvent) => {
+              const { uid } = event.detail;
+
+              // Scroll to the corresponding place block in the editor (but don't expand it)
+              if (uid) {
+                findAndScrollToPlace(uid);
+              }
+            };
+
+            // Add event listener for editor hover events
+            const handleEditorPlaceHover = (event: CustomEvent) => {
+              const { place, dayNumber } = event.detail;
+              console.log("📡 editor:placeHover received:", {
+                placeName: place.name,
+                uid: place.uid,
+                dayNumber,
+                timestamp: new Date().toISOString().split("T")[1].split(".")[0],
+              });
+
+              // Set selected place on map
+              if (place.uid) {
+                console.log("📡 editor:placeHover: Setting selected place:", {
+                  uid: place.uid,
+                  dayIndex: (dayNumber || 1) - 1,
+                });
+                setSelectedPlace({
+                  uid: place.uid,
+                  dayIndex: (dayNumber || 1) - 1,
+                });
+              }
+
+              // Trigger day-specific bounds calculation
+              console.log(
+                "📡 editor:placeHover: Calling triggerDayBounds for day:",
+                dayNumber || 1
+              );
+              triggerDayBounds(dayNumber || 1);
+
+              // Only update direction styles if routes are currently visible
+              if (areRoutesVisible() && dayNumber) {
+                const dayIndex = dayNumber - 1;
+                console.log("📡 editor:placeHover: Direction styling update:", {
+                  placeName: place.name,
+                  placeUID: place.uid,
+                  extractedDayNumber: dayNumber,
+                  calculatedDayIndex: dayIndex,
+                  shouldHighlightDay: dayNumber,
+                });
+                emitDirectionStyleUpdate(dayIndex); // Convert to 0-based dayIndex
+              }
+            };
+
+            const handleEditorDayHover = async (event: CustomEvent) => {
+              const { dayNumber, places } = event.detail;
+              console.log("📡 editor:dayHover received from DOM:", {
+                dayNumber,
+                placeCount: places.length,
+                domPlaces: places.map((p: any) => ({
+                  uid: p.uid,
+                  name: p.name,
+                  lat: p.lat,
+                  lng: p.lng,
+                  hasCoords: !!(p.lat && p.lng),
+                })),
+              });
+
+              // Use the same extraction method as place hover for consistency
+              console.log(
+                "📡 editor:dayHover: Using extractPlacesFromDay for consistency..."
+              );
+              const editorPlaces = await extractPlacesFromDay(
+                editorRef,
+                dayNumber
+              );
+
+              console.log("📡 editor:dayHover extracted from editor:", {
+                editorPlaceCount: editorPlaces.length,
+                editorPlaces: editorPlaces.map((p) => ({
+                  name: p.name,
+                  lat: p.lat,
+                  lng: p.lng,
+                })),
+              });
+
+              // Use editor places (more reliable than DOM scan)
+              if (editorPlaces.length > 0) {
+                const bounds = calculateDayBounds(editorPlaces);
+                console.log("📡 editor:dayHover calculated bounds:", bounds);
+                if (bounds) {
+                  console.log("📡 editor:dayHover emitting fitDayBounds...");
+                  emitFitDayBounds(bounds, MAX_ZOOM_LEVEL, dayNumber);
+                }
+              } else {
+                console.warn(
+                  "📡 editor:dayHover: No places found in editor data for day",
+                  dayNumber
+                );
+              }
+
+              // Only update direction styles if routes are currently visible
+              if (areRoutesVisible()) {
+                // Highlight this day's directions (thick lines) and dim others (thin lines)
+                emitDirectionStyleUpdate(dayNumber - 1); // Convert to 0-based dayIndex
+              }
+            };
+
+            const handleEditorHoverEnd = () => {
+              console.log("📡 editor:hoverEnd received");
+
+              // Clear selected place
+              setSelectedPlace(null);
+
+              // Note: Do NOT reset direction styles on hover-out - maintain current day highlighting
+              // Direction styles should only be reset when explicitly needed, not on every hover-out
             };
 
             if (holderRef.current) {
@@ -928,6 +1191,24 @@ export default function ItineraryEditor({
                 "story:hoverEnd",
                 handleStoryHoverEnd as EventListener
               );
+
+              // Add editor-specific event listeners
+              window.addEventListener(
+                "map:placeClicked",
+                handleMapPlaceClick as EventListener
+              );
+              window.addEventListener(
+                "editor:dayHover",
+                handleEditorDayHover as unknown as EventListener
+              );
+              window.addEventListener(
+                "editor:placeHover",
+                handleEditorPlaceHover as EventListener
+              );
+              window.addEventListener(
+                "editor:hoverEnd",
+                handleEditorHoverEnd as EventListener
+              );
             }
           },
         });
@@ -954,6 +1235,12 @@ export default function ItineraryEditor({
         window.removeEventListener("story:dayHover", () => {});
         window.removeEventListener("story:placeHover", () => {});
         window.removeEventListener("story:hoverEnd", () => {});
+
+        // Remove editor-specific event listeners
+        window.removeEventListener("map:placeClicked", () => {});
+        window.removeEventListener("editor:dayHover", () => {});
+        window.removeEventListener("editor:placeHover", () => {});
+        window.removeEventListener("editor:hoverEnd", () => {});
       }
 
       if (
@@ -1205,6 +1492,9 @@ export default function ItineraryEditor({
         // Insert other block types normally
         editorRef.current.blocks.insert(blockType);
       }
+
+      // Scroll to and focus the newly inserted block at the end
+      scrollToAndFocusBlock(holderRef, blockType, totalBlocks);
 
       // Trigger place numbering update after any place or hotel block is added
       if (blockType === "place" || blockType === "hotel") {
