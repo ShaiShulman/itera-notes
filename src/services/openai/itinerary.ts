@@ -37,6 +37,127 @@ export type {
   GeneratedItinerary,
 } from "@/features/generateLLM/types";
 
+export async function generateItineraryStream(
+  request: ItineraryGenerationRequest
+): Promise<ReadableStream<string>> {
+  const {
+    destination,
+    startDate,
+    endDate,
+    interests,
+    travelStyle,
+    additionalNotes,
+  } = request;
+
+  const totalDays =
+    (new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000 +
+    1;
+
+  // Create the prompt for OpenAI
+  const prompt = createItineraryPrompt({
+    destination,
+    startDate,
+    endDate,
+    totalDays,
+    interests,
+    travelStyle,
+    additionalNotes,
+  });
+
+  const startTime = Date.now();
+
+  const completionParams: any = {
+    model: MODEL_NAME,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a professional travel planner. Create detailed, practical itineraries with specific places, realistic timing, and helpful descriptions. Always include approximate latitude and longitude coordinates for each place.",
+      },
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+  };
+
+  if (TEMPERATURE !== undefined) {
+    completionParams.temperature = TEMPERATURE;
+  }
+
+  if (MAX_TOKENS !== undefined) {
+    completionParams.max_tokens = MAX_TOKENS;
+  }
+
+  try {
+    const stream = await openai.chat.completions.create({
+      ...completionParams,
+      stream: true,
+    });
+
+    return new ReadableStream<string>({
+      async start(controller) {
+        let fullResponse = "";
+
+        try {
+          for await (const chunk of stream as any) {
+            const content = chunk.choices[0]?.delta?.content || "";
+            if (content) {
+              fullResponse += content;
+
+              controller.enqueue(content);
+            }
+          }
+
+          const duration = Date.now() - startTime;
+
+          // Log successful streaming call
+          apiLogger.logOpenAICall({
+            model: MODEL_NAME,
+            prompt,
+            response: fullResponse,
+            duration,
+            status: "success",
+            fromCache: false,
+          });
+
+          controller.close();
+        } catch (streamError) {
+          const duration = Date.now() - startTime;
+          console.error("❌ Streaming error:", streamError);
+
+          apiLogger.logOpenAICall({
+            model: MODEL_NAME,
+            prompt,
+            duration,
+            status: "error",
+            fromCache: false,
+            error:
+              streamError instanceof Error
+                ? streamError.message
+                : String(streamError),
+          });
+
+          controller.error(streamError);
+        }
+      },
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    apiLogger.logOpenAICall({
+      model: MODEL_NAME,
+      prompt,
+      duration,
+      status: "error",
+      fromCache: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    console.error("Error creating streaming itinerary:", error);
+    throw new Error("Failed to create streaming itinerary");
+  }
+}
+
 export async function generateItinerary(
   request: ItineraryGenerationRequest
 ): Promise<GeneratedItinerary> {

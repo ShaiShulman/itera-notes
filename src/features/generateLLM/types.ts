@@ -34,3 +34,23 @@ export interface GeneratedItinerary {
   totalDays: number;
   days: ItineraryDay[];
 }
+
+// Streaming-related types
+export interface StreamingState {
+  isStreaming: boolean;
+  streamingLines: PreviewLine[];
+  error?: string;
+}
+
+export interface PreviewLine {
+  type: "title" | "day" | "place" | "paragraph" | "unknown";
+  content: string;
+  cleanedContent: string;
+  metadata?: {
+    dayNumber?: number;
+    date?: string;
+    placeName?: string;
+    coordinates?: { lat: number; lng: number };
+    region?: string;
+  };
+}
