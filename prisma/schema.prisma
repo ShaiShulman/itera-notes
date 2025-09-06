@@ -95,3 +95,20 @@ model ItineraryDirections {
   
   @@unique([itineraryId, dayIndex])
 }
+
+model GoogleCache {
+  key            String    @id                        // Cache key (e.g., "places:photos:abc123")
+  type           String                               // Cache type: "photo", "place", "direction"
+  data           Bytes                                // Cached data (BLOB for photos, JSON for others)
+  size           Int                                  // Data size in bytes
+  expiresAt      DateTime?                           // Expiration timestamp (NULL for no expiry)
+  createdAt      DateTime  @default(now())          // When cache entry was created
+  accessCount    Int       @default(0)              // Number of times accessed
+  lastAccessedAt DateTime  @default(now())          // Last access timestamp
+  
+  @@index([type])                                    // Index for filtering by cache type
+  @@index([expiresAt])                              // Index for cleanup queries
+  @@index([type, size])                             // Composite index for analytics
+  @@index([type, lastAccessedAt])                   // Index for LRU eviction
+  @@map("google_cache")
+}

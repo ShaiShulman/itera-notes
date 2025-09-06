@@ -1,10 +1,21 @@
 /**
- * Server-side cache service for Google APIs using node-cache with disk persistence
+ * Google API Cache System - Entry point for cache implementations
+ * 
+ * Exports:
+ * - googleAPICache: SQLite-based cache (primary)
+ * - fileBasedCache: File-based cache (fallback)
+ * - legacyGoogleAPICache: Memory cache (legacy)
+ * 
+ * TTL Settings:
+ * - Photos: 90 days
+ * - Places: 30 days  
+ * - Directions: 7 days
+ * - Search: 14 days
  */
 
 import NodeCache from "node-cache";
-import fs from "fs";
-import path from "path";
+import * as fs from "fs";
+import * as path from "path";
 
 // Cache TTL constants (in seconds)
 export const CACHE_TTL = {
@@ -24,6 +35,27 @@ interface CacheOptions {
  * Generate cache key for places API calls
  */
 export function generatePlacesKey(
+  method: string,
+  ...params: (string | number)[]
+): string {
+  const cleanParams = params
+    .map((p) => String(p)
+      .toLowerCase()
+      .trim()
+      // First replace punctuation with spaces to ensure separation
+      .replace(/[^\w\s]/g, ' ') // Replace punctuation with spaces
+      .replace(/\s+/g, "_")     // Convert multiple spaces to single underscores
+      .replace(/^_+|_+$/g, '')  // Remove leading/trailing underscores
+    )
+    .join("|");
+  return `places:${method}:${cleanParams}`;
+}
+
+/**
+ * Legacy cache key generation (for backward compatibility)
+ * @deprecated Use generatePlacesKey instead
+ */
+export function generateLegacyPlacesKey(
   method: string,
   ...params: (string | number)[]
 ): string {
@@ -264,11 +296,49 @@ export class GoogleAPICache {
   }
 }
 
-// Create singleton instance
-export const googleAPICache = new GoogleAPICache({
+// Import the new database-based segmented cache system
+import { DatabaseSegmentedCache } from "./databaseSegmentedCache";
+import { SegmentedCache } from "./segmentedCache";
+
+// Create singleton instance using the new database-based cache
+export const googleAPICache = new DatabaseSegmentedCache({
+  dbPath: path.join(process.cwd(), "prisma", "dev.db"), // Database path for SQLite cache
+  maxSize: 500 * 1024 * 1024, // 500MB total cache
+  maxEntries: 10000, // 10k entries max
+  enableWAL: true, // Enable WAL mode for better concurrency
+  defaultTTLs: {
+    photos: 90 * 24 * 60 * 60, // 90 days for photos
+    places: 30 * 24 * 60 * 60, // 30 days for places
+    directions: 7 * 24 * 60 * 60, // 7 days for directions
+  },
+  pragmaSettings: {
+    cache_size: -64000, // 64MB cache
+    synchronous: "NORMAL", // Balance between performance and safety
+    temp_store: "MEMORY", // Store temp tables in memory
+  },
+});
+
+// Keep the file-based segmented cache as fallback
+export const fileBasedCache = new SegmentedCache({
+  cacheDir: path.join(process.cwd(), ".cache", "google-apis-files"),
+  photoCache: {
+    maxSize: 500 * 1024 * 1024,
+    maxFiles: 5000,
+    enableLRU: true,
+  },
+  dataCache: {
+    maxMemorySize: 50 * 1024 * 1024,
+    backupInterval: 25,
+    cleanupInterval: 5 * 60 * 1000,
+  },
+  enableAnalytics: true,
+});
+
+// Keep the legacy GoogleAPICache class for backward compatibility if needed
+export const legacyGoogleAPICache = new GoogleAPICache({
   diskPersistence: true,
-  backupInterval: 25, // Save to disk every 25 cache sets
-  cacheDir: path.join(process.cwd(), ".cache", "google-apis"),
+  backupInterval: 25,
+  cacheDir: path.join(process.cwd(), ".cache", "google-apis-legacy"),
 });
 
 // Export for convenience

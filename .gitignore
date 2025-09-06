@@ -55,9 +55,12 @@ logs/
 .cache/
 
 # database
-prisma/prisma/dev.db
+prisma/dev.db
+prisma/dev.db-shm
+prisma/dev.db-wal
 prisma/migrations/
 
 # research folders
 research/results
 research/data
+
