@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
-import { useItinerary } from "@/contexts/ItineraryContext";
+import { useUserItineraries } from "@/hooks/useUserItineraries";
 import {
   HiOutlineMap,
   HiOutlinePlus,
@@ -14,20 +14,41 @@ import Image from "next/image";
 export default function HomePage() {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const { state } = useItinerary();
+  const {
+    hasItineraries,
+    lastViewedItineraryId,
+    isLoading: itinerariesLoading,
+  } = useUserItineraries();
 
-  // Redirect authenticated users based on itinerary state
+  // Redirect authenticated users based on their itineraries
   useEffect(() => {
-    if (session) {
-      if (state.currentItinerary || state.editorData) {
-        console.log("📝 Itinerary found, redirecting to editor");
+    if (session && !itinerariesLoading) {
+      // If user has itineraries and we have a last viewed one, go to it
+      if (hasItineraries && lastViewedItineraryId) {
+        console.log(
+          "📝 Redirecting to last viewed itinerary:",
+          lastViewedItineraryId
+        );
+        router.push(`/editor/${lastViewedItineraryId}`);
+      }
+      // If user has itineraries but no last viewed (shouldn't happen), go to editor
+      else if (hasItineraries) {
+        console.log("📝 User has itineraries, redirecting to editor");
         router.push("/editor");
-      } else {
-        console.log("📝 No itinerary found, redirecting to create-itinerary");
+      }
+      // If user has no itineraries, go to create
+      else {
+        console.log("📝 No itineraries found, redirecting to create-itinerary");
         router.push("/create-itinerary");
       }
     }
-  }, [session, state.currentItinerary, state.editorData, router]);
+  }, [
+    session,
+    hasItineraries,
+    lastViewedItineraryId,
+    itinerariesLoading,
+    router,
+  ]);
 
   // Show loading state while checking auth
   if (status === "loading") {

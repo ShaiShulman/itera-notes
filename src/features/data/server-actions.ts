@@ -7,6 +7,8 @@ import {
   listItineraries as listItinerariesService,
   deleteItinerary as deleteItineraryService,
   getItineraryHash as getItineraryHashService,
+  getLastViewedItinerary as getLastViewedItineraryService,
+  hasUserItineraries as hasUserItinerariesService,
 } from "./itinerary-service";
 import {
   SaveItineraryRequest,
@@ -125,4 +127,36 @@ export async function updateItineraryDetails(
       error: error instanceof Error ? error.message : "Unknown error occurred",
     };
   }
+}
+
+/**
+ * Server action to get the most recently viewed itinerary for the current user
+ */
+export async function getLastViewedItinerary(): Promise<{ success: boolean; itineraryId?: string; error?: string }> {
+  const session = await auth();
+  
+  if (!session?.user?.id) {
+    return {
+      success: false,
+      error: "Authentication required",
+    };
+  }
+
+  return getLastViewedItineraryService(session.user.id);
+}
+
+/**
+ * Server action to check if the current user has any itineraries
+ */
+export async function hasUserItineraries(): Promise<{ success: boolean; hasItineraries?: boolean; error?: string }> {
+  const session = await auth();
+  
+  if (!session?.user?.id) {
+    return {
+      success: false,
+      error: "Authentication required",
+    };
+  }
+
+  return hasUserItinerariesService(session.user.id);
 }
