@@ -75,11 +75,13 @@ model Itinerary {
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  lastViewedAt    DateTime @default(now()) // Track when itinerary was last viewed
   
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   directions      ItineraryDirections[]
   
   @@index([userId, updatedAt])
+  @@index([userId, lastViewedAt])
 }
 
 model ItineraryDirections {

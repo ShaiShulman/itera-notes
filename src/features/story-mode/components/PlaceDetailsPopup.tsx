@@ -6,6 +6,7 @@ import { BasePlaceBlockData } from "../../editor/types";
 import { formatDrivingTimeAndDistance } from "../../editor/utils/formatting";
 import { cleanString } from "@/utils/strings";
 import { ImageViewer } from "@/components/ui/ImageViewer";
+import { PLACE_CONFIG } from "@/config/placeConfig";
 
 export interface PlaceDetailsPopupProps {
   placeData: BasePlaceBlockData;
@@ -141,8 +142,8 @@ export const PlaceDetailsPopup: React.FC<PlaceDetailsPopupProps> = ({
         placeData.photoReferences &&
         placeData.photoReferences.length > 0 && (
           <div className="mb-3">
-            <div className="grid grid-cols-4 gap-1">
-              {placeData.photoReferences.slice(0, 4).map((photoRef, index) => (
+            <div className="grid grid-cols-2 gap-2">
+              {placeData.photoReferences.slice(0, PLACE_CONFIG.MAX_PHOTOS).map((photoRef, index) => (
                 <ImageViewer
                   key={index}
                   photoRef={photoRef}

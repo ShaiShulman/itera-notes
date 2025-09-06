@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSession, signOut, signIn } from "next-auth/react";
 import { CustomIcon } from "@/components/icons/CustomIcon";
+import { useUserItineraries } from "@/hooks/useUserItineraries";
 
 const navigationItems = [
   {
@@ -38,6 +39,7 @@ const navigationItems = [
 export default function TopNavigation() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const { hasItineraries, lastViewedItineraryId, isLoading } = useUserItineraries();
 
   return (
     <nav className="bg-slate-900 border-b border-slate-700 shadow-lg">
@@ -65,7 +67,48 @@ export default function TopNavigation() {
               {session &&
                 navigationItems.map((item) => {
                   const isActive = pathname === item.href;
+                  
+                  // Special handling for Itinerary Editor
+                  if (item.name === "Itinerary Editor") {
+                    const isDisabled = !isLoading && hasItineraries === false;
+                    const editorHref = hasItineraries && lastViewedItineraryId 
+                      ? `/editor/${lastViewedItineraryId}`
+                      : item.href;
 
+                    if (isDisabled) {
+                      return (
+                        <div
+                          key={item.name}
+                          className="px-4 py-2 rounded-lg text-sm font-medium flex items-center space-x-1 text-slate-500 cursor-not-allowed opacity-50"
+                        >
+                          <CustomIcon name={item.icon} className="h-5 w-5" />
+                          <span>{item.name}</span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <Link
+                        key={item.name}
+                        href={editorHref}
+                        className={`
+                        px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-1
+                        ${
+                          item.primary
+                            ? "bg-blue-600 text-white hover:bg-blue-700 shadow-md"
+                            : isActive
+                            ? "bg-slate-700 text-white"
+                            : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                        }
+                      `}
+                      >
+                        <CustomIcon name={item.icon} className="h-5 w-5" />
+                        <span>{item.name}</span>
+                      </Link>
+                    );
+                  }
+
+                  // Regular handling for other items
                   return (
                     <Link
                       key={item.name}
@@ -157,7 +200,48 @@ export default function TopNavigation() {
           {session &&
             navigationItems.map((item) => {
               const isActive = pathname === item.href;
+              
+              // Special handling for Itinerary Editor
+              if (item.name === "Itinerary Editor") {
+                const isDisabled = !isLoading && hasItineraries === false;
+                const editorHref = hasItineraries && lastViewedItineraryId 
+                  ? `/editor/${lastViewedItineraryId}`
+                  : item.href;
 
+                if (isDisabled) {
+                  return (
+                    <div
+                      key={item.name}
+                      className="flex items-center space-x-3 px-3 py-2 rounded-md text-base font-medium text-slate-500 cursor-not-allowed opacity-50"
+                    >
+                      <CustomIcon name={item.icon} className="h-5 w-5" />
+                      <span>{item.name}</span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={item.name}
+                    href={editorHref}
+                    className={`
+                    flex items-center space-x-3 px-3 py-2 rounded-md text-base font-medium transition-colors duration-200
+                    ${
+                      item.primary
+                        ? "bg-blue-600 text-white"
+                        : isActive
+                        ? "bg-slate-700 text-white"
+                        : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                    }
+                  `}
+                  >
+                    <CustomIcon name={item.icon} className="h-5 w-5" />
+                    <span>{item.name}</span>
+                  </Link>
+                );
+              }
+
+              // Regular handling for other items
               return (
                 <Link
                   key={item.name}

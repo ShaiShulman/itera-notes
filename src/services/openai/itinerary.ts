@@ -3,6 +3,7 @@ import { createItineraryPrompt } from "@/features/generateLLM/promptBuilder";
 import { parseItineraryResponse } from "@/features/generateLLM/responseParser";
 import { enrichPlacesWithGoogleData } from "@/features/generateLLM/enrichment";
 import { GeneratedItinerary } from "@/features/generateLLM/types";
+import { callOpenAI } from "./llmService";
 import { apiLogger } from "@/services/logging/apiLogger";
 
 if (!process.env.OPENAI_API_KEY) {
@@ -186,58 +187,10 @@ export async function generateItinerary(
   });
 
   console.log("prompt", prompt);
-  const startTime = Date.now();
 
   try {
-    const completionParams: any = {
-      model: MODEL_NAME,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a professional travel planner. Create detailed, practical itineraries with specific places, realistic timing, and helpful descriptions. Always include approximate latitude and longitude coordinates for each place.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-    };
-
-    if (TEMPERATURE !== undefined) {
-      completionParams.temperature = TEMPERATURE;
-    }
-
-    if (MAX_TOKENS !== undefined) {
-      completionParams.max_tokens = MAX_TOKENS;
-    }
-
-    const completion = await openai.chat.completions.create(completionParams);
-
-    const response = completion.choices[0]?.message?.content;
-    const duration = Date.now() - startTime;
-
-    console.log("response", response);
-    if (!response) {
-      throw new Error("No response from OpenAI");
-    }
-
-    // Log successful OpenAI call
-    apiLogger.logOpenAICall({
-      model: MODEL_NAME,
-      prompt,
-      response,
-      tokensUsed: completion.usage
-        ? {
-            promptTokens: completion.usage.prompt_tokens,
-            completionTokens: completion.usage.completion_tokens,
-            totalTokens: completion.usage.total_tokens,
-          }
-        : undefined,
-      duration,
-      status: "success",
-      fromCache: false,
-    });
+    // Use the generalized OpenAI service
+    const response = await callOpenAI(prompt);
 
     // Parse the OpenAI response into structured data
     const parsedItinerary = parseItineraryResponse(
@@ -254,18 +207,6 @@ export async function generateItinerary(
 
     return enrichedItinerary;
   } catch (error) {
-    const duration = Date.now() - startTime;
-
-    // Log failed OpenAI call
-    apiLogger.logOpenAICall({
-      model: MODEL_NAME,
-      prompt,
-      duration,
-      status: "error",
-      fromCache: false,
-      error: error instanceof Error ? error.message : String(error),
-    });
-
     console.error("Error generating itinerary with OpenAI:", error);
     throw new Error("Failed to generate itinerary");
   }

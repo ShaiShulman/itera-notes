@@ -7,8 +7,8 @@ FROM base AS deps
 # RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install sqlite dependencies
-RUN apk add --no-cache openssl sqlite
+# Install sqlite dependencies and build tools
+RUN apk add --no-cache openssl sqlite python3 make g++
 
 # Copy package.json and package-lock.json
 COPY package*.json ./
@@ -16,20 +16,30 @@ COPY package*.json ./
 # Install dependencies including dev dependencies for build
 RUN npm ci --ignore-scripts
 
+# Rebuild native modules for the current platform
+RUN npm rebuild better-sqlite3
+
 # Install Prisma CLI for running migrations
 RUN npm install prisma --save-dev
 
 COPY prisma ./prisma/
 COPY prisma/migrations ./prisma/migrations/
 
-ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
-RUN npx prisma generate
-
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
+
+# Install build tools in builder stage too
+RUN apk add --no-cache python3 make g++
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Rebuild native modules for the current platform
+RUN npm rebuild better-sqlite3
+
+ENV PRISMA_CLIENT_ENGINE_TYPE=binary
+RUN npx prisma generate
 
 # Next.js collects completely anonymous telemetry data about general usage.
 # Learn more here: https://nextjs.org/telemetry
@@ -64,8 +74,14 @@ RUN mkdir -p /app/logs
 RUN chown nextjs:nodejs /app/logs
 
 # Create database directory and set proper permissions
-RUN mkdir -p /app/src/services/database
-RUN chown nextjs:nodejs /app/src/services/database
+RUN mkdir -p /app/data
+RUN chmod 777 /app/data
+RUN chown nextjs:nodejs /app/data
+
+# Create cache directory with full permissions for app to create subdirectories
+RUN mkdir -p /app/.cache
+RUN chown -R nextjs:nodejs /app/.cache
+RUN chmod -R 755 /app/.cache
 
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
@@ -75,17 +91,17 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma/
 COPY --from=builder --chown=nextjs:nodejs /app/prisma/migrations ./prisma/migrations/
 ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
-ENV DATABASE_URL="file:/app/prisma/dev.db"
+ENV DATABASE_URL="file:/app/data/dev.db"
 
 USER nextjs
 
 # Ensure database directory and file are writable by runtime user
-RUN chmod -R u+rwX,g+rwX /app/prisma || true
+RUN chmod -R u+rwX,g+rwX /app/data || true
 
 EXPOSE 3000
 
 # Create volumes for logs and database persistence
-VOLUME ["/app/logs", "/app/prisma"]
+VOLUME ["/app/logs", "/app/data", "/app/.cache"]
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"

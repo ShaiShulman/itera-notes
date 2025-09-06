@@ -2,6 +2,7 @@
 
 import { googlePlacesService } from "@/services/google/places";
 import type { PlaceSearchResult, PlaceDetails } from "../types";
+import { PLACE_CONFIG } from "@/config/placeConfig";
 
 export async function searchPlacesAction(
   query: string
@@ -80,9 +81,9 @@ export async function findPlaceByNameAction(placeName: string): Promise<{
     if (!placeDetails) {
       return { success: false, error: "Could not fetch place details" };
     }
-    // Get photo references (not URLs) for client-side API calls - extract 3 for better visual experience
+    // Get photo references (not URLs) for client-side API calls - limit to configured amount
     const photoReferences = (placeDetails.photos || [])
-      .slice(0, 3)
+      .slice(0, PLACE_CONFIG.MAX_PHOTOS_FETCH)
       .map((photo) => photo.photo_reference);
 
     // Get thumbnail reference for first photo

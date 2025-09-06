@@ -64,3 +64,4 @@ prisma/migrations/
 research/results
 research/data
 
+prisma/dev.db

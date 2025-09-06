@@ -2,6 +2,10 @@
 set -e
 
 echo "[entrypoint] DATABASE_URL=${DATABASE_URL}"
+
+# Ensure data directory exists (should already exist from Dockerfile)
+mkdir -p /app/data
+
 echo "[entrypoint] Running Prisma migrations..."
 prisma migrate deploy
 
