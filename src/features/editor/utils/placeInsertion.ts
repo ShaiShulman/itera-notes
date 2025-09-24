@@ -22,13 +22,16 @@ export interface DayContext {
 /**
  * Extract day context from the editor DOM
  */
-export function extractDayContext(editorElement: Element, targetDayNumber: number): DayContext {
+export function extractDayContext(
+  editorElement: Element,
+  targetDayNumber: number
+): DayContext {
   console.log(`🔍 Extracting context for day ${targetDayNumber}...`);
 
   const allBlocks = editorElement.querySelectorAll(".ce-block");
   let currentDay = 0;
   let dayTitle = `Day ${targetDayNumber}`;
-  let dayDate = new Date().toISOString().split('T')[0]; // Default to today
+  let dayDate = new Date().toISOString().split("T")[0]; // Default to today
   const existingPlaces: Array<{ name: string; address?: string }> = [];
   let inTargetDay = false;
 
@@ -39,16 +42,19 @@ export function extractDayContext(editorElement: Element, targetDayNumber: numbe
     const dayBlock = block.querySelector(".day-block");
     if (dayBlock) {
       currentDay++;
-      
+
       if (currentDay === targetDayNumber) {
         // Extract day title and date from the day block
-        const titleElement = dayBlock.querySelector("[data-day-title]") || 
-                           dayBlock.querySelector("span") ||
-                           dayBlock;
+        const titleElement =
+          dayBlock.querySelector("[data-day-title]") ||
+          dayBlock.querySelector("span") ||
+          dayBlock;
         if (titleElement) {
           const titleText = titleElement.textContent || "";
           // Try to extract title from format like "Day 1 - 2024-01-01 - Rome Exploration"
-          const matches = titleText.match(/Day\s+\d+.*?-\s*(\d{4}-\d{2}-\d{2}).*?-\s*(.+)|Day\s+\d+.*?-\s*(.+)/);
+          const matches = titleText.match(
+            /Day\s+\d+.*?-\s*(\d{4}-\d{2}-\d{2}).*?-\s*(.+)|Day\s+\d+.*?-\s*(.+)/
+          );
           if (matches) {
             if (matches[1] && matches[2]) {
               dayDate = matches[1];
@@ -70,13 +76,14 @@ export function extractDayContext(editorElement: Element, targetDayNumber: numbe
     if (inTargetDay && currentDay === targetDayNumber) {
       const placeBlock = block.querySelector(".place-block");
       const hotelBlock = block.querySelector(".hotel-block");
-      
+
       if (placeBlock || hotelBlock) {
         const blockElement = placeBlock || hotelBlock;
-        const nameElement = blockElement?.querySelector("[data-place-name]") ||
-                           blockElement?.querySelector(".place-name") ||
-                           blockElement?.querySelector("span");
-        
+        const nameElement =
+          blockElement?.querySelector("[data-place-name]") ||
+          blockElement?.querySelector(".place-name") ||
+          blockElement?.querySelector("span");
+
         if (nameElement && nameElement.textContent) {
           const placeName = nameElement.textContent.trim();
           if (placeName && placeName !== "Click to add...") {
@@ -107,7 +114,10 @@ export function getUserPreferencesFromContext(itineraryState?: any) {
     const { travelStyle, interests, destination } = itineraryState.formMetadata;
     return {
       travelStyle: travelStyle || "moderate",
-      interests: interests && interests.length > 0 ? interests : ["culture", "food", "history"],
+      interests:
+        interests && interests.length > 0
+          ? interests
+          : ["culture", "food", "history"],
       destination: destination || "Unknown",
     };
   }
@@ -129,7 +139,9 @@ export function extractDestinationFromContext(editorElement: Element): string {
   if (titleElement && titleElement.textContent) {
     const titleText = titleElement.textContent;
     // Look for patterns like "Rome Itinerary" or "Trip to Paris"
-    const matches = titleText.match(/(?:Trip to|Visit to|Itinerary for|Travel to)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
+    const matches = titleText.match(
+      /(?:Trip to|Visit to|Itinerary for|Travel to)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i
+    );
     if (matches && matches[1]) {
       return matches[1];
     }
@@ -158,19 +170,25 @@ export async function generateAndInsertPlaceParagraph(
 ): Promise<{ success: boolean; paragraphId?: string; error?: string }> {
   console.log("🎯 Starting place paragraph generation:", {
     placeName: context.placeName,
-    dayNumber: context.dayNumber
+    dayNumber: context.dayNumber,
   });
 
   try {
     // Extract day context
-    const dayContext = extractDayContext(context.editorElement, context.dayNumber);
-    
+    const dayContext = extractDayContext(
+      context.editorElement,
+      context.dayNumber
+    );
+
     // Get user preferences from context
     const userPrefs = getUserPreferencesFromContext(itineraryState);
 
     // Extract destination - prefer from context, fallback to page extraction
-    const contextDestination = userPrefs.destination !== "Unknown" ? userPrefs.destination : null;
-    const destination = contextDestination || extractDestinationFromContext(context.editorElement);
+    const contextDestination =
+      userPrefs.destination !== "Unknown" ? userPrefs.destination : null;
+    const destination =
+      contextDestination ||
+      extractDestinationFromContext(context.editorElement);
 
     console.log("📋 Generating description with context:", {
       placeName: context.placeName,
@@ -179,7 +197,7 @@ export async function generateAndInsertPlaceParagraph(
       existingPlacesCount: dayContext.existingPlaces.length,
       destination,
       travelStyle: userPrefs.travelStyle,
-      interests: userPrefs.interests
+      interests: userPrefs.interests,
     });
 
     // Generate description via server action

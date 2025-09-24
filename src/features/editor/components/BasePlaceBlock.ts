@@ -378,11 +378,25 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         }
 
         // Generate paragraph description for places (not hotels) after collapse
+        console.log(
+          `🔍 Free text search - checking if should generate paragraph: blockType="${
+            this.blockType
+          }", hasPlaceId=${!!this.data.placeId}, name="${this.data.name}"`
+        );
         if (this.blockType === "Place" && this.data.placeId) {
+          console.log(
+            `✅ Free text conditions met - triggering paragraph generation for ${this.data.name}`
+          );
           // Small delay to ensure DOM is updated after collapse
           setTimeout(() => {
             this.generatePlaceParagraph();
           }, 100);
+        } else {
+          console.log(
+            `❌ Free text conditions not met - no paragraph generation. blockType="${
+              this.blockType
+            }", hasPlaceId=${!!this.data.placeId}`
+          );
         }
       },
       onFreeText: (text) => {

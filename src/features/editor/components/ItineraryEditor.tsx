@@ -22,6 +22,7 @@ import {
   emitDirectionStyleUpdate,
 } from "@/features/map/boundsManager";
 import { triggerPlaceNumberingUpdate } from "./BasePlaceBlock";
+import { generateAndInsertPlaceParagraph } from "../utils/placeInsertion";
 import HeaderBlock from "@editorjs/header";
 import ParagraphBlock from "@editorjs/paragraph";
 import "./editorjs-global.css";
