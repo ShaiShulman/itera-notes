@@ -21,19 +21,6 @@ export async function saveItinerary(
   userId: string,
   request: SaveItineraryRequest
 ): Promise<SaveItineraryResponse> {
-  console.log("💾 Saving itinerary to database:", {
-    id: request.id,
-    title: request.title,
-    blocksCount: request.editorData.blocks.length,
-    hasFormMetadata: !!(
-      request.destination ||
-      request.startDate ||
-      request.endDate ||
-      request.interests ||
-      request.travelStyle
-    ),
-  });
-
   const contentHash = generateContentHash(request.editorData);
   const editorDataJson = JSON.stringify(request.editorData);
 

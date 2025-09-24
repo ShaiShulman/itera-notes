@@ -93,12 +93,6 @@ export function convertItineraryToEditorData(
     for (let i = 0; i < day.places.length; i++) {
       const place = day.places[i];
 
-      // Use existing linkedParagraphId from parsed data, or generate if needed
-      console.log(
-        `🔍 CONVERTER: "${place.name}" - paragraph: "${
-          place.paragraph || "NONE"
-        }", linkedParagraphId: "${place.linkedParagraphId || "NONE"}", isGenerated: ${isGenerated}`
-      );
       console.log(`🔍 CONVERTER DEBUG: place object keys:`, Object.keys(place));
       console.log(`🔍 CONVERTER DEBUG: paragraph check - hasProperty: ${place.hasOwnProperty('paragraph')}, value: "${place.paragraph}", trimmed: "${place.paragraph?.trim()}", length: ${place.paragraph?.length || 0}`);
       

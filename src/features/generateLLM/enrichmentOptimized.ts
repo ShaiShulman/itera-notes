@@ -5,7 +5,7 @@ import { calculateStraightLineDistance } from "@/utils/distance";
 /**
  * Optimized place enrichment that loads essential data immediately:
  * 1. Using basic field profiles (coordinates, address, photos)
- * 2. Skipping expensive fields (ratings, reviews) 
+ * 2. Skipping expensive fields (ratings, reviews)
  * 3. Always includes thumbnails for immediate display
  */
 
@@ -23,7 +23,7 @@ export async function enrichPlacesBasic(
   itinerary: GeneratedItinerary,
   options: EnrichmentOptions = {
     maxEnrichPerDay: undefined, // No limit by default
-    includeAllPhotos: true
+    includeAllPhotos: true,
   }
 ): Promise<GeneratedItinerary> {
   console.log("🔍 Starting place enrichment with immediate thumbnail loading");
@@ -33,11 +33,11 @@ export async function enrichPlacesBasic(
       console.log(`🔍 Enriching places for day ${day.dayNumber}`);
 
       // Apply limit if specified
-      const placesToEnrich = options.maxEnrichPerDay 
+      const placesToEnrich = options.maxEnrichPerDay
         ? day.places.slice(0, options.maxEnrichPerDay)
         : day.places;
-      
-      const remainingPlaces = options.maxEnrichPerDay 
+
+      const remainingPlaces = options.maxEnrichPerDay
         ? day.places.slice(options.maxEnrichPerDay)
         : [];
 
@@ -121,11 +121,9 @@ export async function enrichPlacesBasic(
 /**
  * Enrich a single place with expensive data (ratings, reviews) on demand
  */
-export async function enrichPlaceWithRatings(
-  place: any
-): Promise<any> {
+export async function enrichPlaceWithRatings(place: any): Promise<any> {
   console.log(`🔍 Loading ratings and reviews for: ${place.name}`);
-  
+
   try {
     if (!place.placeId) {
       console.warn(`No placeId available for ${place.name}`);
@@ -133,12 +131,12 @@ export async function enrichPlaceWithRatings(
     }
 
     const { googlePlacesService } = await import("@/services/google/places");
-    
+
     // Get atmosphere data for ratings/reviews (+$5/1K)
     const fullDetails = await googlePlacesService.getAtmospherePlaceDetails(
       place.placeId
     );
-    
+
     if (fullDetails) {
       return {
         ...place,
@@ -150,7 +148,7 @@ export async function enrichPlaceWithRatings(
         status: "fully-enriched" as const,
       };
     }
-    
+
     return place;
   } catch (error) {
     console.error(`❌ Error loading ratings for ${place.name}:`, error);

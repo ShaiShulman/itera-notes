@@ -498,7 +498,6 @@ export function ItineraryProvider({ children }: ItineraryProviderProps) {
         try {
           // Extract title from first header element
           const extractedTitle = extractTitleFromEditorData(state.editorData!);
-          console.log("📝 Extracted title from first header:", extractedTitle);
 
           const response = await saveItinerary({
             id: state.currentItineraryId || undefined,
@@ -539,7 +538,6 @@ export function ItineraryProvider({ children }: ItineraryProviderProps) {
                     : undefined,
                 },
               });
-              console.log("✅ Updated currentItineraryId to:", response.id);
             }
 
             if (response.unchanged) {

@@ -66,3 +66,52 @@ Requirements:
 - Provide practical, actionable recommendations. You can include practical tips about going from place to place (if not trivial) and about opening hours and other practical matters, as long as they are short. For hikings and walking trips include walking time and difficulty.
 - Do not include any blocks other than days and places`;
 }
+
+export interface PlaceDescriptionContext {
+  placeName: string;
+  placeAddress?: string;
+  dayContext: {
+    dayNumber: number;
+    dayTitle: string;
+    dayDate: string;
+    existingPlaces: Array<{
+      name: string;
+      address?: string;
+    }>;
+  };
+  travelStyle: string;
+  interests: string[];
+  destination: string;
+}
+
+export function createPlaceDescriptionPrompt(context: PlaceDescriptionContext): string {
+  const { placeName, placeAddress, dayContext, travelStyle, interests, destination } = context;
+  
+  const existingPlacesText = dayContext.existingPlaces.length > 0 
+    ? `Other places already planned for this day: ${dayContext.existingPlaces.map(p => p.name).join(", ")}`
+    : "This is the first place planned for this day";
+
+  return `Create a travel description for a specific place in an itinerary.
+
+PLACE TO DESCRIBE: ${placeName}${placeAddress ? ` (${placeAddress})` : ""}
+
+CONTEXT:
+- Destination: ${destination}
+- Day ${dayContext.dayNumber}: ${dayContext.dayTitle} (${dayContext.dayDate})
+- ${existingPlacesText}
+- Travel Style: ${travelStyle}
+- Traveler Interests: ${interests.join(", ")}
+
+Create a compelling description for this place that:
+- Explains why this specific traveler would want to visit it
+- Describes what they can expect to do there
+- Includes interesting cultural and historical background
+- Uses 2nd person language starting with a verb ("Discover the ancient...", "Wander through...")
+- Is written in a tourist guide style
+- Is no more than 40 words
+- Includes the place name ${placeName} (or shortened version) surrounded by **double asterisks** within the text
+- Matches the ${travelStyle} travel style
+- Appeals to someone interested in: ${interests.join(", ")}
+
+Format: Return ONLY the description paragraph, no additional formatting or explanations.`;
+}
