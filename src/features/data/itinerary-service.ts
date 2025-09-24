@@ -24,6 +24,7 @@ export async function saveItinerary(
   const contentHash = generateContentHash(request.editorData);
   const editorDataJson = JSON.stringify(request.editorData);
 
+
   try {
     const result = await prisma.$transaction(async (tx) => {
       let itineraryId = request.id;
@@ -64,7 +65,33 @@ export async function saveItinerary(
               editorData: editorDataJson,
               hash: contentHash,
 
+
               // Update form metadata if provided, otherwise keep existing or provide defaults
+              destination:
+                request.destination !== undefined
+                  ? request.destination
+                  : fullExisting?.destination || "Unknown Destination",
+              startDate:
+                request.startDate !== undefined
+                  ? request.startDate
+                  : fullExisting?.startDate || new Date(),
+              endDate:
+                request.endDate !== undefined
+                  ? request.endDate
+                  : fullExisting?.endDate || new Date(),
+              interests:
+                request.interests !== undefined
+                  ? request.interests
+                  : fullExisting?.interests || [],
+              travelStyle:
+                request.travelStyle !== undefined
+                  ? request.travelStyle
+                  : fullExisting?.travelStyle || "mid-range",
+              additionalNotes:
+                request.additionalNotes !== undefined
+                  ? request.additionalNotes
+                  : fullExisting?.additionalNotes,
+
               destination:
                 request.destination !== undefined
                   ? request.destination
@@ -99,6 +126,10 @@ export async function saveItinerary(
             "📝 Itinerary not found, creating new one with ID:",
             request.id
           );
+          console.log(
+            "📝 Itinerary not found, creating new one with ID:",
+            request.id
+          );
           await tx.itinerary.create({
             data: {
               id: request.id, // Use the provided ID
@@ -106,6 +137,7 @@ export async function saveItinerary(
               title: request.title,
               editorData: editorDataJson,
               hash: contentHash,
+
 
               // Include form metadata (provide defaults for required fields)
               destination: request.destination || "Unknown Destination",
@@ -125,6 +157,7 @@ export async function saveItinerary(
             title: request.title,
             editorData: editorDataJson,
             hash: contentHash,
+
 
             // Include form metadata (provide defaults for required fields)
             destination: request.destination || "Unknown Destination",
@@ -156,8 +189,21 @@ export async function saveItinerary(
               "Skipping direction with invalid dayIndex:",
               direction.dayIndex
             );
+          if (
+            typeof direction.dayIndex !== "number" ||
+            direction.dayIndex < 0
+          ) {
+            console.warn(
+              "Skipping direction with invalid dayIndex:",
+              direction.dayIndex
+            );
             return false;
           }
+          if (!direction.color || typeof direction.color !== "string") {
+            console.warn(
+              "Skipping direction with invalid color:",
+              direction.color
+            );
           if (!direction.color || typeof direction.color !== "string") {
             console.warn(
               "Skipping direction with invalid color:",
@@ -181,6 +227,9 @@ export async function saveItinerary(
             directionsResult: JSON.stringify(direction.directionsResult),
           }));
 
+          console.log(
+            `💾 Saving ${directionsData.length} valid directions (filtered from ${request.directions.length})`
+          );
           console.log(
             `💾 Saving ${directionsData.length} valid directions (filtered from ${request.directions.length})`
           );
@@ -208,7 +257,10 @@ export async function saveItinerary(
     if (error instanceof Error && error.message.includes("UNIQUE constraint")) {
       console.log("🔄 Conflict detected, attempting to resolve...");
 
+
       // Wait a short time and retry once
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       try {
@@ -234,6 +286,7 @@ export async function saveItinerary(
 
 /**
  * Loads an itinerary and its directions by ID
+ * Also updates the lastViewedAt timestamp
  * Also updates the lastViewedAt timestamp
  */
 export async function loadItinerary(
@@ -266,12 +319,22 @@ export async function loadItinerary(
       userId
     );
 
+    // Update last viewed timestamp using raw SQL to bypass type issues
+    await prisma.$executeRawUnsafe(
+      `UPDATE Itinerary SET lastViewedAt = datetime('now'), updatedAt = datetime('now') WHERE id = ? AND userId = ?`,
+      itineraryId,
+      userId
+    );
+
     // Parse editor data with error handling
     let editorData: EditorData;
     try {
       editorData = JSON.parse(itinerary.editorData);
 
+
       // Validate the parsed data structure
+      if (!editorData || typeof editorData !== "object") {
+        throw new Error("Invalid editorData structure");
       if (!editorData || typeof editorData !== "object") {
         throw new Error("Invalid editorData structure");
       }
@@ -285,6 +348,7 @@ export async function loadItinerary(
       editorData = {
         time: Date.now(),
         blocks: [],
+        version: "2.28.0",
         version: "2.28.0",
       };
     }
@@ -320,10 +384,15 @@ export async function loadItinerary(
         directions,
         lastUpdated: itinerary.updatedAt,
 
+
         // Include form metadata
         destination: itinerary.destination || undefined,
         startDate: itinerary.startDate || undefined,
         endDate: itinerary.endDate || undefined,
+        interests: Array.isArray(itinerary.interests)
+          ? (itinerary.interests as unknown[]).filter(
+              (item): item is string => typeof item === "string"
+            )
         interests: Array.isArray(itinerary.interests)
           ? (itinerary.interests as unknown[]).filter(
               (item): item is string => typeof item === "string"
@@ -358,6 +427,7 @@ export async function listItineraries(
         updatedAt: true,
         editorData: true, // Include editorData for extracting stats and images
 
+
         // Include form metadata
         destination: true,
         startDate: true,
@@ -372,6 +442,37 @@ export async function listItineraries(
     console.log("✅ Itineraries list loaded:", itineraries.length);
 
     // Parse editorData for each itinerary
+    const parsedItineraries: ItinerarySummary[] = itineraries.map(
+      (itinerary) => ({
+        ...itinerary,
+        title: itinerary.title || undefined, // Convert null to undefined for TypeScript
+        editorData: itinerary.editorData
+          ? (() => {
+              try {
+                return JSON.parse(itinerary.editorData);
+              } catch (error) {
+                console.error(
+                  `Error parsing editorData for itinerary ${itinerary.id}:`,
+                  error
+                );
+                return undefined;
+              }
+            })()
+          : undefined,
+
+        // Include form metadata
+        destination: itinerary.destination || undefined,
+        startDate: itinerary.startDate || undefined,
+        endDate: itinerary.endDate || undefined,
+        interests: Array.isArray(itinerary.interests)
+          ? (itinerary.interests as unknown[]).filter(
+              (item): item is string => typeof item === "string"
+            )
+          : undefined,
+        travelStyle: itinerary.travelStyle || undefined,
+        additionalNotes: itinerary.additionalNotes || undefined,
+      })
+    );
     const parsedItineraries: ItinerarySummary[] = itineraries.map(
       (itinerary) => ({
         ...itinerary,
@@ -435,6 +536,11 @@ export async function deleteItinerary(
     return { success: true };
   } catch (error) {
     console.error("❌ Error deleting itinerary:", error);
+
+    if (
+      error instanceof Error &&
+      error.message.includes("Record to delete does not exist")
+    ) {
 
     if (
       error instanceof Error &&
@@ -515,6 +621,63 @@ export async function updateItineraryDetails(
     };
   }
 }
+
+/**
+ * Gets the most recently viewed itinerary for a user
+ */
+export async function getLastViewedItinerary(
+  userId: string
+): Promise<{ success: boolean; itineraryId?: string; error?: string }> {
+  console.log("👁️ Getting last viewed itinerary for user:", userId);
+
+  try {
+    // Use raw query to access lastViewedAt field until Prisma client is regenerated
+    const result = (await prisma.$queryRawUnsafe(
+      `SELECT id FROM Itinerary WHERE userId = ? ORDER BY lastViewedAt DESC LIMIT 1`,
+      userId
+    )) as Array<{ id: string }>;
+
+    const itinerary = result.length > 0 ? result[0] : null;
+
+    if (!itinerary) {
+      return { success: true }; // No itineraries exist, but not an error
+    }
+
+    console.log("✅ Found last viewed itinerary:", itinerary.id);
+    return { success: true, itineraryId: itinerary.id };
+  } catch (error) {
+    console.error("❌ Error getting last viewed itinerary:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+    };
+  }
+}
+
+/**
+ * Checks if a user has any itineraries
+ */
+export async function hasUserItineraries(
+  userId: string
+): Promise<{ success: boolean; hasItineraries?: boolean; error?: string }> {
+  console.log("🔍 Checking if user has itineraries:", userId);
+
+  try {
+    const count = await prisma.itinerary.count({
+      where: { userId },
+    });
+
+    console.log(`✅ User has ${count} itineraries`);
+    return { success: true, hasItineraries: count > 0 };
+  } catch (error) {
+    console.error("❌ Error checking user itineraries:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+    };
+  }
+}
+
 
 /**
  * Gets the most recently viewed itinerary for a user
