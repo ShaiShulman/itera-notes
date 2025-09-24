@@ -155,7 +155,16 @@ export async function generateItineraryStream(
     });
 
     console.error("Error creating streaming itinerary:", error);
-    throw new Error("Failed to create streaming itinerary");
+
+    // Instead of throwing, return a ReadableStream that signals failure
+    // This allows the caller to handle fallback gracefully
+    return new ReadableStream({
+      start(controller) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown streaming error";
+        controller.enqueue(`STREAMING_FAILED: ${errorMessage}`);
+        controller.close();
+      }
+    });
   }
 }
 

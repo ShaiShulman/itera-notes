@@ -42,6 +42,7 @@ function NewItineraryForm() {
   const [newInterest, setNewInterest] = useState("");
   const [streamingLines, setStreamingLines] = useState<PreviewLine[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingFailedWarning, setStreamingFailedWarning] = useState<string | null>(null);
   const streamingContainerRef = useRef<HTMLDivElement>(null);
   const parserRef = useRef(createStreamingParser());
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -60,6 +61,7 @@ function NewItineraryForm() {
     setIsStreaming(false);
     setLoadingMessage("");
     setStreamingLines([]);
+    setStreamingFailedWarning(null);
     parserRef.current.reset();
   };
 
@@ -114,46 +116,73 @@ function NewItineraryForm() {
   };
 
   // Handle streaming content with secure API
-  const handleSecureStreaming = async (formData: any, abortSignal: AbortSignal): Promise<string> => {
+  const handleSecureStreaming = async (formData: any, abortSignal: AbortSignal): Promise<string | null> => {
     let fullContent = "";
-    
-    await secureStream(
-      "/api/generate-itinerary-stream",
-      formData,
-      (chunk: string) => {
-        // Check if cancelled before processing chunk
-        if (abortSignal.aborted) {
-          throw new Error("Operation was cancelled");
-        }
-        
-        fullContent += chunk;
-        
-        // Process chunk through preview parser
-        const newLines = parserRef.current.addContent(chunk);
-        
-        if (newLines.length > 0) {
-          setStreamingLines(prev => [...prev, ...newLines]);
-          
-          // Auto-scroll to bottom of streaming container
-          setTimeout(() => {
-            if (streamingContainerRef.current) {
-              streamingContainerRef.current.scrollTop = streamingContainerRef.current.scrollHeight;
-            }
-          }, 0);
-        }
-      },
-      abortSignal
-    );
-    
-    // Finalize any remaining content if not cancelled
-    if (!abortSignal.aborted) {
-      const finalLines = parserRef.current.finalize();
-      if (finalLines.length > 0) {
-        setStreamingLines(prev => [...prev, ...finalLines]);
+    let streamingFailed = false;
+
+    try {
+      await secureStream(
+        "/api/generate-itinerary-stream",
+        formData,
+        (chunk: string) => {
+          // Check if cancelled before processing chunk
+          if (abortSignal.aborted) {
+            throw new Error("Operation was cancelled");
+          }
+
+          // Check if streaming failed
+          if (chunk.startsWith('STREAMING_FAILED:')) {
+            const errorMessage = chunk.replace('STREAMING_FAILED:', '').trim();
+            console.warn("🔄 Streaming failed, showing warning and falling back:", errorMessage);
+            setStreamingFailedWarning(`Streaming encountered an issue: ${errorMessage}. Continuing with standard generation...`);
+            streamingFailed = true;
+            return; // Don't throw, just mark as failed and return
+          }
+
+          fullContent += chunk;
+
+          // Process chunk through preview parser
+          const newLines = parserRef.current.addContent(chunk);
+
+          if (newLines.length > 0) {
+            setStreamingLines(prev => [...prev, ...newLines]);
+
+            // Auto-scroll to bottom of streaming container
+            setTimeout(() => {
+              if (streamingContainerRef.current) {
+                streamingContainerRef.current.scrollTop = streamingContainerRef.current.scrollHeight;
+              }
+            }, 0);
+          }
+        },
+        abortSignal
+      );
+
+      // Check if streaming failed during the process
+      if (streamingFailed) {
+        return null; // Signal that streaming failed and fallback is needed
       }
+
+      // Finalize any remaining content if not cancelled
+      if (!abortSignal.aborted) {
+        const finalLines = parserRef.current.finalize();
+        if (finalLines.length > 0) {
+          setStreamingLines(prev => [...prev, ...finalLines]);
+        }
+      }
+
+      return fullContent;
+    } catch (error) {
+      // Handle other streaming errors (not the STREAMING_FAILED case)
+      if (error instanceof Error && error.message === "Operation was cancelled") {
+        throw error; // Re-throw cancellation errors
+      }
+
+      // For other errors, set a warning and signal fallback
+      console.warn("🔄 Streaming encountered an error, falling back:", error);
+      setStreamingFailedWarning(`Streaming encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Continuing with standard generation...`);
+      return null; // Signal fallback needed
     }
-    
-    return fullContent;
   };
 
   // Fallback to non-streaming generation
@@ -162,6 +191,11 @@ function NewItineraryForm() {
     setLoadingMessage("Creating your personalized itinerary (standard mode)...");
     setIsStreaming(false);
     setStreamingLines([]);
+
+    // If no warning is set yet, set a generic one
+    if (!streamingFailedWarning) {
+      setStreamingFailedWarning("Streaming mode unavailable. Continuing with standard generation...");
+    }
 
     try {
       // Import the original server action as fallback
@@ -278,8 +312,16 @@ function NewItineraryForm() {
         const { processStreamedContent } = await import("@/features/generateLLM/generateAction");
 
         // Start secure streaming generation with cancel support
-        fullContent = await handleSecureStreaming(result.data, abortControllerRef.current.signal);
-        
+        const streamingResult = await handleSecureStreaming(result.data, abortControllerRef.current.signal);
+
+        // Check if streaming failed and fallback is needed
+        if (streamingResult === null) {
+          console.warn("⚠️ Streaming returned null, falling back to non-streaming generation");
+          await handleFallbackGeneration(result.data);
+          return;
+        }
+
+        fullContent = streamingResult;
         setLoadingMessage("Processing your itinerary...");
         setIsStreaming(false);
 
@@ -364,17 +406,17 @@ function NewItineraryForm() {
         }
       } catch (streamingError) {
         console.error("Secure streaming generation failed:", streamingError);
-        
+
         // Check if operation was cancelled
         if (streamingError instanceof Error && streamingError.message === "Operation was cancelled") {
           console.log("✅ Itinerary generation was cancelled by user");
           return; // Exit gracefully, UI already reset by handleCancel
         }
-        
+
         // Check if it's a security-related error
         if (securityError) {
           let errorMessage = "Security error occurred. ";
-          
+
           switch (securityError.type) {
             case "RATE_LIMITED":
               errorMessage += "You've exceeded the request limit. Please try again later.";
@@ -388,16 +430,18 @@ function NewItineraryForm() {
             default:
               errorMessage += securityError.message;
           }
-          
+
           setErrors({ submit: errorMessage });
           setIsLoading(false);
           setIsStreaming(false);
           setLoadingMessage("");
           setStreamingLines([]);
+          setStreamingFailedWarning(null);
           return;
         }
-        
-        // Attempt fallback to non-streaming if it's not a security error
+
+        // For other errors (not streaming failures), attempt fallback
+        console.warn("⚠️ Unexpected error during streaming, attempting fallback to non-streaming generation");
         await handleFallbackGeneration(result.data);
         return;
       }
@@ -415,6 +459,7 @@ function NewItineraryForm() {
       setIsStreaming(false);
       setLoadingMessage("");
       setStreamingLines([]);
+      setStreamingFailedWarning(null);
     }
   };
 
@@ -472,10 +517,36 @@ function NewItineraryForm() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 relative">
+        {/* Warning Notification - Fixed position top-right */}
+        {streamingFailedWarning && (
+          <div className="fixed top-4 right-4 z-50 max-w-sm bg-amber-50 border border-amber-200 rounded-lg p-4 shadow-lg">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-amber-600" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-amber-800 font-medium">Streaming Notice</p>
+                <p className="text-sm text-amber-700 mt-1">{streamingFailedWarning}</p>
+              </div>
+              <button
+                onClick={() => setStreamingFailedWarning(null)}
+                className="ml-4 text-amber-600 hover:text-amber-800"
+              >
+                <span className="sr-only">Dismiss</span>
+                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Streaming Content Background - positioned from top-left */}
         {isStreaming && streamingLines.length > 0 && (
           <div className="absolute top-0 left-0 w-full h-full overflow-hidden">
-            <div 
+            <div
               ref={streamingContainerRef}
               className="h-full overflow-y-auto p-8 bg-black/5"
             >

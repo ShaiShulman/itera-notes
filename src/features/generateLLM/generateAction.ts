@@ -94,7 +94,8 @@ export async function generateItineraryStreamAction(
         if (error instanceof Error && error.message.includes("aborted")) {
           console.log("✅ Stream properly cancelled");
         } else {
-          await writer.write(encoder.encode(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`));
+          // Signal that streaming failed and fallback is needed
+          await writer.write(encoder.encode(`STREAMING_FAILED: ${error instanceof Error ? error.message : 'Unknown streaming error'}`));
         }
       } finally {
         await writer.close();

@@ -193,6 +193,8 @@ export async function saveItinerary(
       }
 
       return { id: itineraryId!, unchanged: false };
+    }, {
+      timeout: 15000 // Increase timeout to 15 seconds
     });
 
     if (result.unchanged) {
