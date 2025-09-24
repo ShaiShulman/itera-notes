@@ -22,8 +22,6 @@ import {
 import { getDayColor } from "@/features/map/utils/colors";
 import { generateAndInsertPlaceParagraph } from "../utils/placeInsertion";
 import { PLACE_CONFIG } from "@/config/placeConfig";
-import { generateAndInsertPlaceParagraph } from "../utils/placeInsertion";
-import { PLACE_CONFIG } from "@/config/placeConfig";
 
 // Debounce mechanism for place numbering updates
 let numberingUpdateTimeout: NodeJS.Timeout | null = null;
@@ -239,34 +237,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
 
     // Auto-collapse immediately instead of waiting 500ms
     this.renderCollapsed(false);
-    // Auto-collapse immediately instead of waiting 500ms
-    this.renderCollapsed(false);
 
-    // Trigger editor change event
-    if (this.wrapper) {
-      const changeEvent = new Event("input", { bubbles: true });
-      this.wrapper.dispatchEvent(changeEvent);
-    }
-
-    // Generate paragraph description for places (not hotels) after collapse
-    console.log(
-      `🔍 Checking if should generate paragraph: blockType="${this.blockType}", placeId="${this.data.placeId}", name="${this.data.name}"`
-    );
-    if (this.blockType === "Place" && this.data.placeId) {
-      console.log(
-        `✅ Conditions met - triggering paragraph generation for ${this.data.name}`
-      );
-      // Small delay to ensure DOM is updated after collapse
-      setTimeout(() => {
-        this.generatePlaceParagraph();
-      }, 100);
-    } else {
-      console.log(
-        `❌ Conditions not met - no paragraph generation. blockType="${
-          this.blockType
-        }", hasPlaceId=${!!this.data.placeId}`
-      );
-    }
     // Trigger editor change event
     if (this.wrapper) {
       const changeEvent = new Event("input", { bubbles: true });
@@ -464,8 +435,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
 
     // Start in editing mode if no place is set OR if we have a name but no placeId (map-added place)
     const shouldStartEditing = !this.data.placeId;
-    // Start in editing mode if no place is set OR if we have a name but no placeId (map-added place)
-    const shouldStartEditing = !this.data.placeId;
 
     // Use setTimeout to ensure DOM is fully updated before calculating place numbers
     setTimeout(() => {
@@ -576,58 +545,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       }
     });
 
-    // Add event listener for updating linkedParagraphId (for map-added places)
-    this.wrapper.addEventListener("place:updateLinkedParagraphId", (e) => {
-      console.log(
-        `📨 ${this.blockType}: Received updateLinkedParagraphId event for ${this.data.name}`
-      );
-      e.stopPropagation();
-      const customEvent = e as CustomEvent;
-      const { placeName, linkedParagraphId } = customEvent.detail;
-
-      console.log(
-        `🔍 ${
-          this.blockType
-        }: Event details - placeName: "${placeName}", my name: "${
-          this.data.name
-        }", linkedParagraphId: ${linkedParagraphId?.slice(0, 8)}...`
-      );
-
-      // Only update if this is the right place
-      if (this.data.name === placeName) {
-        console.log(
-          `🔗 ${this.blockType}: Names match! Updating linkedParagraphId for ${
-            this.data.name
-          } to ${linkedParagraphId.slice(0, 8)}...`
-        );
-        console.log(
-          `🔍 ${this.blockType}: Before update - current linkedParagraphId: ${
-            this.data.linkedParagraphId || "NONE"
-          }`
-        );
-
-        this.data.linkedParagraphId = linkedParagraphId;
-
-        console.log(
-          `🔍 ${this.blockType}: After update - new linkedParagraphId: ${this.data.linkedParagraphId}`
-        );
-
-        // Trigger editor change event to save the updated data
-        if (this.wrapper) {
-          const changeEvent = new Event("input", { bubbles: true });
-          this.wrapper.dispatchEvent(changeEvent);
-        }
-
-        console.log(
-          `✅ ${this.blockType}: Successfully updated linkedParagraphId for ${this.data.name}`
-        );
-      } else {
-        console.log(
-          `❌ ${this.blockType}: Names don't match - "${this.data.name}" !== "${placeName}"`
-        );
-      }
-    });
-
     // Add hover event listeners for map integration
     this.wrapper.addEventListener("mouseenter", (e) => {
       e.stopPropagation();
@@ -635,7 +552,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     });
 
     this.wrapper.addEventListener("mouseleave", (e) => {
-      e.stopPropagation();
       e.stopPropagation();
       this.handleMouseLeave();
     });
@@ -709,13 +625,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         dayIndex++; // Increment for each day block found
       }
       // Check if this block contains our place block
-      // Check if this block contains our place block
       else if (block.querySelector(`.${this.blockType.toLowerCase()}-block`)) {
-        const blockElement = block.querySelector(
-          `.${this.blockType.toLowerCase()}-block`
-        );
-        const isCurrentBlock =
-          blockElement && blockElement.contains(this.wrapper);
         const blockElement = block.querySelector(
           `.${this.blockType.toLowerCase()}-block`
         );
@@ -1399,12 +1309,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         const paragraphSpinner = this.createParagraphSpinner();
         contentContainer.appendChild(paragraphSpinner);
       }
-
-      // Add paragraph generation spinner next to status indicator (only for places, not hotels)
-      if (this.autocompleteType === "place") {
-        const paragraphSpinner = this.createParagraphSpinner();
-        contentContainer.appendChild(paragraphSpinner);
-      }
     }
 
     // Driving time display (if available and confirmed, and place is not hidden from map)
@@ -1646,14 +1550,10 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
         gap: 8px;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 8px;
         margin-bottom: 12px;
-        max-width: 180px;
         max-width: 180px;
       `;
 
-      // Show up to configured number of images
       // Show up to configured number of images
       const imagesToShow = this.data.photoReferences
         .filter(
@@ -1662,7 +1562,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
             typeof photoRef === "string" &&
             photoRef.trim().length > 10
         )
-        .slice(0, PLACE_CONFIG.MAX_PHOTOS);
         .slice(0, PLACE_CONFIG.MAX_PHOTOS);
 
       imagesToShow.forEach((photoRef) => {
@@ -2797,7 +2696,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     // Find the day number by looking at the DOM structure
     const dayNumber = this.findDayNumber();
 
-
     if (isHovering) {
       // Emit editor:placeHover event
       const event = new CustomEvent("editor:placeHover", {
@@ -2848,9 +2746,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
     const dayIndex = this.calculateDayIndex();
     const dayNumber = dayIndex + 1; // Convert 0-based index to 1-based day number
 
-    console.log(
-      `📍 ${this.blockType}: Found day number ${dayNumber} (dayIndex: ${dayIndex}) for ${this.data.name}`
-    );
     console.log(
       `📍 ${this.blockType}: Found day number ${dayNumber} (dayIndex: ${dayIndex}) for ${this.data.name}`
     );
@@ -2942,116 +2837,6 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       isDayFinish: false,
       hideInMap: false,
     };
-  }
-
-  // Update the linkedParagraphId for this place block
-  public updateLinkedParagraphId(paragraphId: string): void {
-    console.log(
-      `🔗 BasePlaceBlock: Updating linkedParagraphId for "${this.data.name}":`,
-      paragraphId.slice(0, 8) + "..."
-    );
-    console.log(
-      `🔍 BasePlaceBlock: Before update - current linkedParagraphId: "${
-        this.data.linkedParagraphId || "NONE"
-      }"`
-    );
-
-    this.data.linkedParagraphId = paragraphId;
-
-    console.log(
-      `🔍 BasePlaceBlock: After update - new linkedParagraphId: "${this.data.linkedParagraphId}"`
-    );
-
-    if (this.wrapper) {
-      const changeEvent = new Event("input", { bubbles: true });
-      this.wrapper.dispatchEvent(changeEvent);
-    } else {
-      console.warn(
-        `⚠️ BasePlaceBlock: No wrapper element found for "${this.data.name}" - change event not dispatched`
-      );
-    }
-  }
-
-  // Generate paragraph description for this place
-  private async generatePlaceParagraph() {
-    if (!this.data.name || !this.wrapper) {
-      console.log(
-        "⚠️ Cannot generate paragraph: missing place name or wrapper"
-      );
-      return;
-    }
-
-    console.log(
-      `🎯 Starting paragraph generation for place: ${this.data.name}`
-    );
-
-    // Show spinner to indicate paragraph generation is in progress
-    this.showParagraphSpinner();
-
-    const editorElement = this.wrapper.closest(".codex-editor");
-    if (!editorElement) {
-      console.log("⚠️ Cannot generate paragraph: no editor element found");
-      this.hideParagraphSpinner();
-      return;
-    }
-
-    const dayNumber = this.calculateDayIndex() + 1; // Convert from 0-based to 1-based
-
-    try {
-      const result = await generateAndInsertPlaceParagraph(
-        {
-          placeName: this.data.name,
-          placeAddress: this.data.address,
-          dayNumber: dayNumber,
-          editorElement: editorElement,
-        },
-        (content: string) => {
-          // Find the parent Editor.js block for proper insertion positioning
-          const editorBlock = this.wrapper?.closest(".ce-block");
-
-          console.log(
-            "🚀 BasePlaceBlock: Emitting paragraph insertion event:",
-            {
-              placeName: this.data.name,
-              wrapperClassName: this.wrapper?.className,
-              editorBlockClassName: editorBlock?.className,
-              hasEditorBlock: !!editorBlock,
-            }
-          );
-
-          // Emit a custom event to trigger paragraph block insertion in the editor
-          // The ItineraryEditor will handle updating the linkedParagraphId with the actual generated ID
-          const insertEvent = new CustomEvent("place:insertParagraph", {
-            detail: {
-              content: content,
-              afterPlaceElement: editorBlock || this.wrapper, // Use editor block if found, fallback to wrapper
-            },
-            bubbles: true,
-          });
-
-          this.wrapper?.dispatchEvent(insertEvent);
-        }
-      );
-
-      if (result.success) {
-        console.log(
-          `✅ Successfully generated paragraph for ${this.data.name}`
-        );
-      } else {
-        console.error(
-          `❌ Failed to generate paragraph for ${this.data.name}:`,
-          result.error
-        );
-      }
-    } catch (error) {
-      console.error(
-        `❌ Error generating paragraph for ${this.data.name}:`,
-        error
-      );
-    } finally {
-      // Always hide spinner when generation completes (success or failure)
-      this.hideParagraphSpinner();
-    }
   }
 
   // Update the linkedParagraphId for this place block
