@@ -37,7 +37,7 @@ export async function generateItineraryStreamAction(
           success: false,
           error: `Validation failed: ${errors}`,
         }),
-        { 
+        {
           status: 400,
           headers: { "Content-Type": "application/json" }
         }
@@ -50,6 +50,7 @@ export async function generateItineraryStreamAction(
       endDate,
       interests,
       travelStyle,
+      transportPreference,
       additionalNotes,
     } = validationResult.data;
 
@@ -60,6 +61,7 @@ export async function generateItineraryStreamAction(
       endDate,
       interests,
       travelStyle,
+      transportPreference,
       additionalNotes,
     };
 
@@ -162,6 +164,7 @@ export async function generateItineraryAction(
       endDate,
       interests,
       travelStyle,
+      transportPreference,
       additionalNotes,
     } = validationResult.data;
 
@@ -172,6 +175,7 @@ export async function generateItineraryAction(
       endDate,
       interests,
       travelStyle,
+      transportPreference,
       additionalNotes,
     };
 

@@ -25,6 +25,7 @@ export interface ItineraryDay {
   title: string;
   description: string;
   region?: string;
+  transportMode?: string;
   places: PlaceLocation[];
 }
 
@@ -52,5 +53,6 @@ export interface PreviewLine {
     placeName?: string;
     coordinates?: { lat: number; lng: number };
     region?: string;
+    transportMode?: string;
   };
 }

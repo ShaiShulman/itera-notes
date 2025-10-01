@@ -1,63 +1,24 @@
 // Google Directions API service
 import { FallbackDirectionsService } from "./fallbackDirections";
 import { withDirectionsCache } from "./cacheWrappers";
-
-export interface DirectionsLeg {
-  distance: {
-    text: string;
-    value: number; // meters
-  };
-  duration: {
-    text: string;
-    value: number; // seconds
-  };
-  start_location: {
-    lat: number;
-    lng: number;
-  };
-  end_location: {
-    lat: number;
-    lng: number;
-  };
-}
-
-export interface DirectionsRoute {
-  legs: DirectionsLeg[];
-  overview_polyline: {
-    points: string;
-  };
-}
-
-export interface DirectionsResponse {
-  routes: DirectionsRoute[];
-  status: string;
-  request?: {
-    origin: { lat: number; lng: number } | string;
-    destination: { lat: number; lng: number } | string;
-    waypoints?: Array<{ location: { lat: number; lng: number } | string }>;
-    travelMode: string;
-    unitSystem: string;
-    avoidHighways?: boolean;
-    avoidTolls?: boolean;
-  };
-  available_travel_modes?: string[];
-  geocoded_waypoints?: Array<{
-    geocoder_status: string;
-    place_id: string;
-    types: string[];
-  }>;
-  // Flag to indicate this is a fallback response with straight lines
-  isFallbackStraightLine?: boolean;
-}
-
+import { getNeutralTransitTime } from "@/utils/timeUtils";
 import { apiLogger } from "@/services/logging/apiLogger";
+import {
+  DirectionsStep,
+  DirectionsLeg,
+  DirectionsRoute,
+  DirectionsResponse,
+  PlaceCoordinate,
+} from "./directionsTypes";
 
-export interface PlaceCoordinate {
-  lat: number;
-  lng: number;
-  uid?: string;
-  name: string;
-}
+// Re-export types for external use
+export type {
+  DirectionsStep,
+  DirectionsLeg,
+  DirectionsRoute,
+  DirectionsResponse,
+  PlaceCoordinate,
+};
 
 export class GoogleDirectionsService {
   private apiKey: string;
@@ -67,12 +28,14 @@ export class GoogleDirectionsService {
   }
 
   /**
-   * Calculate driving directions between multiple places in order
+   * Calculate directions between multiple places in order
    * @param places Array of places with coordinates
+   * @param mode Transport mode ('driving', 'transit', 'walking')
    * @returns Promise with directions data (real or fallback straight-line)
    */
   async calculateDirections(
-    places: PlaceCoordinate[]
+    places: PlaceCoordinate[],
+    mode: string = "driving"
   ): Promise<DirectionsResponse> {
     if (places.length < 2) {
       throw new Error("At least 2 places are required to calculate directions");
@@ -89,12 +52,19 @@ export class GoogleDirectionsService {
       origin: `${origin.lat},${origin.lng}`,
       destination: `${destination.lat},${destination.lng}`,
       key: this.apiKey,
-      mode: "driving",
+      mode: mode,
       units: "metric",
     });
 
-    // Add waypoints if any
-    if (waypoints.length > 0) {
+    // Add departure_time for transit mode to ensure neutral time calculations
+    if (mode === "transit") {
+      const neutralTime = getNeutralTransitTime();
+      params.append("departure_time", neutralTime.toString());
+      console.log(`🚌 Using neutral transit time: ${new Date(neutralTime * 1000).toLocaleString()}`);
+    }
+
+    // Add waypoints if any (but not for transit mode - Google requires exactly 2 points)
+    if (waypoints.length > 0 && mode !== "transit") {
       const waypointsStr = waypoints
         .map((wp) => `${wp.lat},${wp.lng}`)
         .join("|");
@@ -104,7 +74,7 @@ export class GoogleDirectionsService {
     const url = `${baseUrl}?${params.toString()}`;
 
     // Use cache wrapper for the API call
-    const { result: data, fromCache } = await withDirectionsCache(places, "driving", async () => {
+    const { result: data, fromCache } = await withDirectionsCache(places, mode, async () => {
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -119,7 +89,7 @@ export class GoogleDirectionsService {
 
       if (data.status === "ZERO_RESULTS") {
         console.warn(
-          `⚠️ DirectionsService: No driving route found, creating fallback straight-line response`
+          `⚠️ DirectionsService: No ${mode} route found, creating fallback straight-line response`
         );
 
         // Log zero results
@@ -127,7 +97,7 @@ export class GoogleDirectionsService {
           origin: origin.name,
           destination: destination.name,
           waypoints: waypoints.map((wp) => wp.name),
-          mode: "driving",
+          mode: mode,
           routeFound: false,
           duration,
           status: "success",
@@ -151,7 +121,7 @@ export class GoogleDirectionsService {
           origin: origin.name,
           destination: destination.name,
           waypoints: waypoints.map((wp) => wp.name),
-          mode: "driving",
+          mode: mode,
           routeFound: false,
           duration,
           status: "error",
@@ -178,7 +148,7 @@ export class GoogleDirectionsService {
         origin: origin.name,
         destination: destination.name,
         waypoints: waypoints.map((wp) => wp.name),
-        mode: "driving",
+        mode: mode,
         routeFound: true,
         totalDistance: totalDistance
           ? `${(totalDistance / 1000).toFixed(1)} km`
@@ -200,7 +170,7 @@ export class GoogleDirectionsService {
         origin: origin.name,
         destination: destination.name,
         waypoints: waypoints.map((wp) => wp.name),
-        mode: "driving",
+        mode: mode,
         routeFound: false,
         duration,
         status: "error",
@@ -217,10 +187,10 @@ export class GoogleDirectionsService {
   }
 
   /**
-   * Extract driving times between consecutive places
+   * Extract travel times between consecutive places
    * @param directionsResponse Response from Google Directions API
    * @param places Original places array
-   * @returns Array of driving times in minutes (first place gets 0)
+   * @returns Array of travel times in minutes (first place gets 0)
    */
   extractDrivingTimes(
     directionsResponse: DirectionsResponse,
@@ -237,20 +207,20 @@ export class GoogleDirectionsService {
     // First place has no driving time from previous
     const drivingTimes = [0];
 
-    // Add driving time for each subsequent place
+    // Add travel time for each subsequent place
     legs.forEach((leg) => {
-      const drivingTimeMinutes = Math.round(leg.duration.value / 60);
-      drivingTimes.push(drivingTimeMinutes);
+      const travelTimeMinutes = Math.round(leg.duration.value / 60);
+      drivingTimes.push(travelTimeMinutes);
     });
 
     return drivingTimes;
   }
 
   /**
-   * Extract driving distances between consecutive places
+   * Extract travel distances between consecutive places
    * @param directionsResponse Response from Google Directions API
    * @param places Original places array
-   * @returns Array of driving distances in meters (first place gets 0)
+   * @returns Array of travel distances in meters (first place gets 0)
    */
   extractDrivingDistances(
     directionsResponse: DirectionsResponse,
@@ -263,14 +233,15 @@ export class GoogleDirectionsService {
     const route = directionsResponse.routes[0];
     const legs = route.legs;
 
-    // First place has no driving distance from previous
+    // First place has no travel distance from previous
     const distances = [0];
 
-    // Add driving distance for each subsequent place
+    // Add travel distance for each subsequent place
     legs.forEach((leg) => {
       distances.push(leg.distance.value);
     });
 
     return distances;
   }
+
 }

@@ -12,6 +12,8 @@ import {
 } from "@/features/editor/actions/directions";
 import { getDayColor } from "@/features/map/utils/colors";
 import { PlaceBlockData, HotelBlockData } from "@/features/editor/types";
+import { TRANSPORT_MODES } from "@/types/transport";
+import { smartConcatenatePolylines } from "./polylineUtils";
 
 /**
  * Find the ending location for a given day based on business rules:
@@ -136,7 +138,8 @@ function convertPlaceLocationsToPlaceData(itinerary: GeneratedItinerary): PlaceB
  */
 export async function calculateDirectionsForDaysWithCrossDayConnections(
   placesByDay: { [dayIndex: number]: PlaceCoordinate[] },
-  allPlacesData: (PlaceBlockData | HotelBlockData)[]
+  allPlacesData: (PlaceBlockData | HotelBlockData)[],
+  transportModesByDay?: { [dayIndex: number]: string }
 ): Promise<{
   directions: DirectionsData[];
   drivingTimesByUid: { [uid: string]: { time: number; distance: number } };
@@ -152,6 +155,9 @@ export async function calculateDirectionsForDaysWithCrossDayConnections(
     const dayIndex = dayIndices[i];
     const dayNumber = dayIndex + 1;
     let places = placesByDay[dayIndex];
+
+    // Get transport mode for this day
+    const transportMode = transportModesByDay?.[dayIndex] || TRANSPORT_MODES.DRIVING;
 
     // Filter out places that are hidden from the map
     places = places.filter(place => {
@@ -188,22 +194,111 @@ export async function calculateDirectionsForDaysWithCrossDayConnections(
     }
 
     console.log(
-      `🚗 Day ${dayNumber}: Calculating directions for ${places.length} places (${i > 0 ? 'including cross-day connection' : 'first day'})`
+      `🚗 Day ${dayNumber}: Calculating ${transportMode} directions for ${places.length} places (${i > 0 ? 'including cross-day connection' : 'first day'})`
     );
 
     try {
-      // Call directions API for this day
-      const directionsResponse: DirectionsResponse = await calculateDirections(places);
+      let directionsResponse: DirectionsResponse;
+      let times: number[] = [];
+      let distances: number[] = [];
 
-      // Check if this is a fallback straight-line response
-      if (directionsResponse.isFallbackStraightLine) {
-        console.warn(
-          `⚠️ Day ${dayNumber}: No driving route found, using straight-line fallback`
-        );
+      if (transportMode === TRANSPORT_MODES.TRANSIT) {
+        // For transit mode, we need to make separate API calls for each consecutive pair
+        console.log(`🚌 Transit mode: Making ${places.length - 1} separate direction requests`);
+
+        // Initialize arrays for cumulative times and distances
+        times = [0]; // First place has 0 time
+        distances = [0]; // First place has 0 distance
+
+        // Create a combined response structure
+        const legs: any[] = [];
+        const combinedPolylinePoints: string[] = [];
+
+        for (let j = 0; j < places.length - 1; j++) {
+          const pairOrigin = places[j];
+          const pairDestination = places[j + 1];
+
+          console.log(`🚌 Transit request ${j + 1}/${places.length - 1}: ${pairOrigin.name} → ${pairDestination.name}`);
+
+          try {
+            const pairResponse = await calculateDirections([pairOrigin, pairDestination], transportMode);
+
+            if (pairResponse.routes && pairResponse.routes.length > 0) {
+              const route = pairResponse.routes[0];
+              if (route.legs && route.legs.length > 0) {
+                const leg = route.legs[0];
+                legs.push(leg);
+
+                // Extract time and distance for this segment
+                const duration = leg.duration?.value || 0; // seconds
+                const distance = leg.distance?.value || 0; // meters
+
+                times.push(duration / 60); // convert to minutes
+                distances.push(distance); // keep in meters
+
+                // Collect polyline points from this segment
+                if (route.overview_polyline && route.overview_polyline.points) {
+                  combinedPolylinePoints.push(route.overview_polyline.points);
+                  console.log(`✅ Transit segment: ${Math.round(duration / 60)}min, ${Math.round(distance / 1000 * 100) / 100}km, polyline collected`);
+                } else {
+                  console.warn(`⚠️ No polyline found for transit segment ${j + 1}`);
+                }
+              } else {
+                console.warn(`⚠️ No legs found for transit segment ${j + 1}`);
+                times.push(0);
+                distances.push(0);
+              }
+            } else {
+              console.warn(`⚠️ No routes found for transit segment ${j + 1}`);
+              times.push(0);
+              distances.push(0);
+            }
+          } catch (error) {
+            console.error(`❌ Error with transit segment ${j + 1}:`, error);
+            times.push(0);
+            distances.push(0);
+          }
+        }
+
+        // Use smart concatenation to handle potential artifacts and antimeridian crossings
+        const concatenationResult = smartConcatenatePolylines(combinedPolylinePoints);
+        console.log(`🚌 Smart concatenation result:`, concatenationResult.metadata);
+
+        // Log any warnings
+        if (concatenationResult.metadata.warnings.length > 0) {
+          console.warn(`⚠️ Transit polyline warnings:`, concatenationResult.metadata.warnings);
+        }
+
+        // Create a combined response structure for the day
+        directionsResponse = {
+          routes: [{
+            legs: legs,
+            overview_polyline: {
+              points: concatenationResult.processedPolyline,
+              isTransitCombined: true, // Flag to indicate this is a combined transit polyline
+              ...concatenationResult.metadata // Include metadata for renderer
+            } as any // Type assertion to allow additional properties
+          }],
+          status: "OK",
+          isFallbackStraightLine: legs.length === 0 || !concatenationResult.success
+        };
+
+      } else {
+        // For driving and walking modes, use the existing single API call approach
+        directionsResponse = await calculateDirections(places, transportMode);
+
+        // Check if this is a fallback straight-line response
+        if (directionsResponse.isFallbackStraightLine) {
+          console.warn(
+            `⚠️ Day ${dayNumber}: No ${transportMode} route found, using straight-line fallback`
+          );
+        }
+
+        // Extract driving times and distances
+        const extracted = await extractDrivingTimes(directionsResponse, places);
+        times = extracted.times;
+        distances = extracted.distances;
       }
-
-      // Extract driving times and distances
-      const { times, distances } = await extractDrivingTimes(directionsResponse, places);
 
       // Store driving times by UID (skip the first place for days after the first, as it's from previous day)
       const startIndex = i > 0 ? 1 : 0; // Skip cross-day connection point
@@ -230,7 +325,7 @@ export async function calculateDirectionsForDaysWithCrossDayConnections(
         console.warn(`⚠️ Skipping directions for dayIndex ${dayIndex} - no color available`);
         continue;
       }
-      
+
       directionsResults.push({
         dayIndex,
         color: dayColor,
@@ -239,7 +334,7 @@ export async function calculateDirectionsForDaysWithCrossDayConnections(
 
       const routeType = directionsResponse.isFallbackStraightLine
         ? "straight-line fallback"
-        : "driving route";
+        : `${transportMode} route`;
       console.log(
         `✅ Day ${dayNumber}: ${routeType} calculated successfully with cross-day logic`
       );
@@ -257,7 +352,7 @@ export async function calculateDirectionsForDaysWithCrossDayConnections(
   const realRoutesCount = directionsResults.length - fallbackCount;
 
   console.log(
-    `✅ Cross-day directions calculation completed - ${realRoutesCount} driving routes, ${fallbackCount} straight-line fallbacks`
+    `✅ Cross-day directions calculation completed - ${realRoutesCount} transport routes, ${fallbackCount} straight-line fallbacks`
   );
 
   return {
@@ -294,8 +389,18 @@ export async function generateDirectionsWithTimes(
     // Convert to place data for cross-day logic
     const allPlacesData = convertPlaceLocationsToPlaceData(itinerary);
 
+    // Extract transport modes by day from itinerary
+    const transportModesByDay: { [dayIndex: number]: string } = {};
+    itinerary.days.forEach((day, index) => {
+      transportModesByDay[index] = day.transportMode || TRANSPORT_MODES.DRIVING;
+    });
+
     // Calculate directions using cross-day connections
-    const { directions, drivingTimesByUid } = await calculateDirectionsForDaysWithCrossDayConnections(placesByDay, allPlacesData);
+    const { directions, drivingTimesByUid } = await calculateDirectionsForDaysWithCrossDayConnections(
+      placesByDay,
+      allPlacesData,
+      transportModesByDay
+    );
 
     // Update the itinerary with driving times
     const updatedItinerary: GeneratedItinerary = {
@@ -316,7 +421,7 @@ export async function generateDirectionsWithTimes(
     };
 
     console.log(
-      `🚗 Generated ${directions.length} direction routes and updated itinerary with driving times using cross-day connections`
+      `🚗 Generated ${directions.length} direction routes and updated itinerary with travel times using cross-day connections`
     );
 
     return {

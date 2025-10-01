@@ -28,6 +28,7 @@ export interface ItineraryGenerationRequest {
   endDate: string;
   interests: string[];
   travelStyle: string;
+  transportPreference?: string;
   additionalNotes?: string;
 }
 
@@ -47,6 +48,7 @@ export async function generateItineraryStream(
     endDate,
     interests,
     travelStyle,
+    transportPreference,
     additionalNotes,
   } = request;
 
@@ -62,6 +64,7 @@ export async function generateItineraryStream(
     totalDays,
     interests,
     travelStyle,
+    transportPreference,
     additionalNotes,
   });
 
@@ -177,6 +180,7 @@ export async function generateItinerary(
     endDate,
     interests,
     travelStyle,
+    transportPreference,
     additionalNotes,
   } = request;
 
@@ -192,6 +196,7 @@ export async function generateItinerary(
     totalDays,
     interests,
     travelStyle,
+    transportPreference,
     additionalNotes,
   });
 

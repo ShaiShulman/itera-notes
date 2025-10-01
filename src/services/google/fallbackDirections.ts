@@ -3,7 +3,7 @@ import {
   DirectionsResponse,
   DirectionsLeg,
   PlaceCoordinate,
-} from "./directions";
+} from "./directionsTypes";
 import { calculateStraightLineDistance } from "@/utils/distance";
 
 /**

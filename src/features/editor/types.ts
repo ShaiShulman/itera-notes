@@ -1,3 +1,5 @@
+import { TransportMode } from "@/types/transport";
+
 export interface PlaceSearchResult {
   place_id: string;
   name: string;
@@ -55,6 +57,7 @@ export interface DayBlockData {
   title?: string;
   description?: string;
   region?: string;
+  transportMode?: TransportMode;
 }
 
 // Base type for place-like blocks (places, hotels, etc.)

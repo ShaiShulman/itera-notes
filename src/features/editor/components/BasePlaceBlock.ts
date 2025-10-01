@@ -1,5 +1,6 @@
 import type { BasePlaceBlockData } from "../types";
 import { formatDrivingTimeAndDistance } from "../utils/formatting";
+import { IconLoader, IconPaths } from "@/assets/icons/iconLoader";
 import {
   attachAutocomplete,
   AutocompleteInstance,
@@ -13,7 +14,6 @@ import {
 import { AutocompleteLocationBias } from "@/features/autocomplete/types";
 import { findPlaceByNameAction } from "../actions/places";
 import { createImageSkeleton } from "@/components/ui/skeleton";
-import { IconLoader, IconPaths } from "@/assets/icons/iconLoader";
 import { BUTTON_DIMENSIONS, ICON_DIMENSIONS, BUTTON_STYLES } from "./constants";
 import {
   getPlacePhotoMicroUrl,
@@ -40,6 +40,76 @@ export function triggerPlaceNumberingUpdate() {
       numberingUpdateTimeout = null;
     }, 200); // 200ms debounce
   }
+}
+
+/**
+ * Get transport icon path for a given mode
+ */
+function getTransportIconPath(mode: string = "driving"): string {
+  switch (mode.toLowerCase()) {
+    case "transit":
+      return IconPaths.TRANSIT;
+    case "walking":
+      return IconPaths.WALKING;
+    case "driving":
+    default:
+      return IconPaths.DRIVING;
+  }
+}
+
+/**
+ * Get transport mode from day context
+ * This function looks for the transport mode of the day that this place belongs to
+ * In EditorJS, blocks are siblings, so we need to find the most recent day block before this place
+ */
+function getTransportModeForPlace(placeElement: HTMLElement): string {
+  // Find the EditorJS wrapper element
+  const editorElement = placeElement.closest('.codex-editor');
+  if (!editorElement) {
+    console.log('🚗 No editor element found, using default driving mode');
+    return "driving";
+  }
+
+  // Find the place block's .ce-block wrapper
+  const placeBlock = placeElement.closest('.ce-block');
+  if (!placeBlock) {
+    console.log('🚗 No .ce-block found for place, using default driving mode');
+    return "driving";
+  }
+
+  // Get all blocks in the editor
+  const allBlocks = editorElement.querySelectorAll('.ce-block');
+  let placeBlockIndex = -1;
+
+  // Find the index of this place block
+  for (let i = 0; i < allBlocks.length; i++) {
+    if (allBlocks[i] === placeBlock) {
+      placeBlockIndex = i;
+      break;
+    }
+  }
+
+  if (placeBlockIndex === -1) {
+    console.log('🚗 Could not find place block index, using default driving mode');
+    return "driving";
+  }
+
+  // Look backwards from the place block to find the most recent day block
+  for (let i = placeBlockIndex - 1; i >= 0; i--) {
+    const block = allBlocks[i];
+    const dayBlockElement = block.querySelector('.day-block') as HTMLElement;
+
+    if (dayBlockElement) {
+      const transportMode = dayBlockElement.getAttribute('data-transport-mode');
+      if (transportMode) {
+        console.log(`🚗 Found transport mode: ${transportMode} from day block at index ${i} (for place at index ${placeBlockIndex})`);
+        return transportMode;
+      }
+    }
+  }
+
+  console.log('🚗 No day block found before this place, using default driving mode');
+  return "driving";
 }
 
 export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
@@ -83,6 +153,12 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         "editor:updatePlaceNumbers",
         this.handlePlaceNumberingUpdate
       );
+
+      // Listen for transport mode updates
+      window.addEventListener(
+        "editor:updateTransportModes",
+        this.handleTransportModeUpdate
+      );
     }
 
     // Listen for map bounds changes
@@ -103,6 +179,15 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       if (!this.isExpanded) {
         this.renderCollapsed();
       }
+    }
+  };
+
+  // Handler for transport mode updates
+  private handleTransportModeUpdate = () => {
+    // Re-render the collapsed view to show updated transport icon (if visible)
+    if (!this.isExpanded) {
+      this.renderCollapsed();
+      console.log(`🚗 ${this.blockType}: Updated transport icon for ${this.data.name}`);
     }
   };
 
@@ -491,6 +576,24 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
           `🏁 ${this.blockType}: Unchecked day finish for ${this.data.name} due to another place being marked as finish`
         );
       }
+    });
+
+    // Add event listener for clearing driving times when transport mode changes
+    this.wrapper.addEventListener("place:clearDrivingTimes", (e) => {
+      e.stopPropagation();
+
+      // Clear the driving times data
+      this.data.drivingTimeFromPrevious = 0;
+      this.data.drivingDistanceFromPrevious = 0;
+
+      // Re-render the collapsed view to hide the driving time display
+      if (!this.isExpanded) {
+        this.renderCollapsed(false);
+      }
+
+      console.log(
+        `🚗 ${this.blockType}: Cleared driving times for ${this.data.name} due to transport mode change`
+      );
     });
 
     // Add event listener for updating linkedParagraphId (for map-added places)
@@ -1334,7 +1437,13 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
         this.data.drivingDistanceFromPrevious || 0
       );
 
-      drivingTime.innerHTML = `<svg fill="#000000" width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6.62,13.08a.9.9,0,0,0-.54.54,1,1,0,0,0,1.3,1.3,1.15,1.15,0,0,0,.33-.21,1.15,1.15,0,0,0,.21-.33A.84.84,0,0,0,8,14a1.05,1.05,0,0,0-.29-.71A1,1,0,0,0,6.62,13.08Zm13.14-4L18.4,5.05a3,3,0,0,0-2.84-2H8.44A3,3,0,0,0,5.6,5.05L4.24,9.11A3,3,0,0,0,2,12v4a3,3,0,0,0,2,2.82V20a1,1,0,0,0,2,0V19H18v1a1,1,0,0,0,2,0V18.82A3,3,0,0,0,22,16V12A3,3,0,0,0,19.76,9.11ZM7.49,5.68A1,1,0,0,1,8.44,5h7.12a1,1,0,0,1,1,.68L17.61,9H6.39ZM20,16a1,1,0,0,1-1,1H5a1,1,0,0,1-1-1V12a1,1,0,0,1,1-1H19a1,1,0,0,1,1,1Zm-3.38-2.92a.9.9,0,0,0-.54.54,1,1,0,0,0,1.3,1.3.9.9,0,0,0,.54-.54A.84.84,0,0,0,18,14a1.05,1.05,0,0,0-.29-.71A1,1,0,0,0,16.62,13.08ZM13,13H11a1,1,0,0,0,0,2h2a1,1,0,0,0,0-2Z"/></svg>
+      // Get appropriate transport icon based on day context
+      const transportMode = getTransportModeForPlace(this.wrapper || document.createElement('div'));
+
+      // Get transport icon path and create img element
+      const transportIconPath = getTransportIconPath(transportMode);
+      drivingTime.innerHTML = `
+        <img src="${transportIconPath}" alt="${transportMode} icon" width="18" height="18" style="display: inline; margin-right: 4px;">
         ${formattedDriving}
       `;
       contentContainer.appendChild(drivingTime);

@@ -11,5 +11,3 @@ prisma migrate deploy
 
 echo "[entrypoint] Starting app..."
 exec node server.js
-
-

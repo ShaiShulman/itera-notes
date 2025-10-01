@@ -5,6 +5,7 @@ export function createItineraryPrompt({
   totalDays,
   interests,
   travelStyle,
+  transportPreference,
   additionalNotes,
 }: {
   destination: string;
@@ -13,19 +14,21 @@ export function createItineraryPrompt({
   totalDays: number;
   interests: string[];
   travelStyle: string;
+  transportPreference?: string;
   additionalNotes?: string;
 }): string {
   return `Create a detailed ${totalDays}-day travel itinerary for ${destination} from ${startDate} to ${endDate}.  
 
 Travel Style: ${travelStyle}
 Interests: ${interests.join(", ")}
+Transport Preference: ${getTransportInstructions(transportPreference)}
 ${additionalNotes ? `Additional Notes: ${additionalNotes}` : ""}
 
 Please format your response EXACTLY as follows:
 
 ITINERARY TITLE: [Creative title for the trip]
 
-DAY 1 - [Date: YYYY-MM-DD] - [Day Title]
+DAY 1 - [Date: YYYY-MM-DD] - [Day Title] - [Transport: driving/transit/walking]
 [Brief day description]
 
 **[Place Name 1]** (lat: XX.XXXXX, lng: XX.XXXXX)
@@ -34,7 +37,7 @@ DAY 1 - [Date: YYYY-MM-DD] - [Day Title]
 **[Place Name 2]** (lat: XX.XXXXX, lng: XX.XXXXX)
 [Description of the place and activities]
 
-DAY 2 - [Date: YYYY-MM-DD] - [Day Title]
+DAY 2 - [Date: YYYY-MM-DD] - [Day Title] - [Transport: driving/transit/walking]
 [Brief day description]
 
 **[Place Name 3]** (lat: XX.XXXXX, lng: XX.XXXXX)
@@ -48,9 +51,10 @@ Requirements:
 - Don't include transportation options unless the transport itself is the attraction
 - Day title should be up to 4 words
 - Don't include alternative routes or options
-- match the activities to the interests of the traveler, the season and whether at the time of the year
+- Match the activities to the interests of the traveler, the season and whether at the time of the year
 - Consider travel time between locations and places that might be closed at the time of the year or on the specific day
 - Each day should have a thematic focus when possible
+- IMPORTANT: Each day header must end with "Transport: [mode]" where mode is driving, transit, or walking
 - For each place, provide a description in a narrative style that shows why the specific traveller would want to visit it, what can they expect to do there and a bit of interesting cultural and historical background about the place. 
 - Write in a tourist guide style. Start paragraph with 2nd person language always start with a verb ("discover the old city..., hike to the top..."), avoid reapting the same language. 
 - Paragraphs should be no more than 25 words for a day and no more than 40 words for a place
@@ -65,6 +69,21 @@ Requirements:
 - Include specific place names (restaurants, museums, attractions, etc.)
 - Provide practical, actionable recommendations. You can include practical tips about going from place to place (if not trivial) and about opening hours and other practical matters, as long as they are short. For hikings and walking trips include walking time and difficulty.
 - Do not include any blocks other than days and places`;
+}
+
+function getTransportInstructions(transportPreference?: string): string {
+  switch (transportPreference) {
+    case "auto":
+      return "Determine the best transport mode for each day (driving/transit/walking) based on the destination, distances, and activities. Specify the chosen transport mode in each day header.";
+    case "driving":
+      return "Use driving/car transport for all days. Plan for longer distances and car-accessible attractions.";
+    case "transit":
+      return "Use public transportation (bus, train, metro, tram) for all days. Focus on transit-accessible locations.";
+    case "walking":
+      return "Plan for walking transport only. Keep activities within walking distance and include walking times.";
+    default:
+      return "Determine the best transport mode for each day (driving/transit/walking) based on the destination, distances, and activities. Specify the chosen transport mode in each day header.";
+  }
 }
 
 export interface PlaceDescriptionContext {

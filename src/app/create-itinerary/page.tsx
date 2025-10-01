@@ -26,6 +26,7 @@ import {
   type NewItineraryForm,
   DEFAULT_INTERESTS,
   TRAVEL_STYLES,
+  TRANSPORT_OPTIONS,
 } from "./types";
 
 interface FormErrors {
@@ -812,6 +813,73 @@ function NewItineraryForm() {
               {errors.travelStyle && (
                 <p className="mt-2 text-sm text-red-600">
                   {errors.travelStyle}
+                </p>
+              )}
+            </div>
+
+            {/* Transport Preference */}
+            <div>
+              <label className="text-lg font-medium text-slate-900 mb-3 block">
+                Preferred Transportation
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {TRANSPORT_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    className={`relative flex cursor-pointer rounded-lg border p-4 transition-colors hover:bg-slate-50 ${
+                      formData.transportPreference === option.value
+                        ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500"
+                        : errors.transportPreference
+                          ? "border-red-500"
+                          : "border-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="transportPreference"
+                      value={option.value}
+                      checked={formData.transportPreference === option.value}
+                      onChange={(e) =>
+                        handleInputChange("transportPreference", e.target.value)
+                      }
+                      className="sr-only"
+                    />
+                    <div className="flex items-start gap-3">
+                      <div className="mt-1 flex-shrink-0">
+                        {option.iconPath ? (
+                          <img
+                            src={option.iconPath}
+                            alt={`${option.label} icon`}
+                            width="18"
+                            height="18"
+                            className="w-[18px] h-[18px]"
+                          />
+                        ) : (
+                          <div dangerouslySetInnerHTML={{ __html: option.icon }} />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium text-slate-900">
+                          {option.label}
+                        </div>
+                        <div className="text-sm text-slate-600">
+                          {option.description}
+                        </div>
+                      </div>
+                    </div>
+                    {formData.transportPreference === option.value && (
+                      <div className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-blue-500">
+                        <svg className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    )}
+                  </label>
+                ))}
+              </div>
+              {errors.transportPreference && (
+                <p className="mt-2 text-sm text-red-600">
+                  {errors.transportPreference}
                 </p>
               )}
             </div>

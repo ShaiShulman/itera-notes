@@ -58,6 +58,7 @@ export function convertItineraryToEditorData(
         date: day.date,
         title: day.title,
         description: day.description,
+        transportMode: day.transportMode || "driving",
         places: day.places.map((place, index) => ({
           id: getUniqueId(),
           uid: `place_${day.dayNumber}_${index}`,
@@ -255,6 +256,7 @@ export function convertEditorDataToItinerary(
       date: dayData.date || "",
       title: dayData.title || "",
       description: dayData.description || "",
+      transportMode: dayData.transportMode || "driving",
       places,
     };
 

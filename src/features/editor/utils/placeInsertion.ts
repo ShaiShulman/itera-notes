@@ -1,5 +1,4 @@
 import { generatePlaceDescriptionAction } from "@/actions/generatePlaceDescription";
-import { useItinerary } from "@/contexts/ItineraryContext";
 
 export interface PlaceInsertionContext {
   placeName: string;

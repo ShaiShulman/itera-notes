@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRANSPORT_PREFERENCE_OPTIONS } from "@/types/transport";
 
 // Zod schema for new itinerary form validation
 export const newItinerarySchema = z
@@ -28,6 +29,12 @@ export const newItinerarySchema = z
         errorMap: () => ({ message: "Please select a travel style" }),
       }
     ),
+    transportPreference: z.enum(
+      ["auto", "driving", "transit", "walking"],
+      {
+        errorMap: () => ({ message: "Please select a transport preference" }),
+      }
+    ).default("auto"),
     additionalNotes: z
       .string()
       .max(1000, "Additional notes are too long")
@@ -111,3 +118,6 @@ export const TRAVEL_STYLES = [
     description: "Intimate and couple-focused",
   },
 ] as const;
+
+// Re-export transport options from centralized types
+export const TRANSPORT_OPTIONS = TRANSPORT_PREFERENCE_OPTIONS;

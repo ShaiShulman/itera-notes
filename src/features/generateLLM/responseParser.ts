@@ -1,6 +1,7 @@
 import { PlaceLocation, ItineraryDay, GeneratedItinerary } from "./types";
 // import { cleanString } from "@/utils/strings";
 import { getUniqueId } from "@/utils/getUniqueId";
+import { TRANSPORT_MODES, TransportMode } from "@/types/transport";
 
 export type { PlaceLocation, ItineraryDay, GeneratedItinerary };
 
@@ -58,7 +59,7 @@ export function parseItineraryResponse(
     const line = lines[i];
     console.log(`📝 Line ${i}: ${line}`);
 
-    // Check for day header: DAY X - Date - Title
+    // Check for day header: DAY X - Date - Title - Transport: mode
     const dayMatch = line.match(/^DAY\s+(\d+)\s*-\s*(.+)/i);
     if (dayMatch) {
       console.log(`📅 Found day header: ${line}`);
@@ -105,9 +106,15 @@ export function parseItineraryResponse(
         ? dateMatch[1]
         : calculateDateForDay(startDate, dayNumber - 1);
 
+      // Extract transport mode from day info
+      const transportMatch = dayInfo.match(/Transport:\s*(driving|transit|walking)/i);
+      const transportMode = transportMatch ? transportMatch[1].toLowerCase() as TransportMode : TRANSPORT_MODES.DRIVING;
+
       const titleWithRegion = dayInfo
         .replace(/\d{4}-\d{2}-\d{2}/, "")
+        .replace(/Transport:\s*(driving|transit|walking)/i, "") // Remove transport info
         .replace(/^\s*-\s*/, "") // Remove any leading " - "
+        .replace(/\s*-\s*$/, "") // Remove any trailing " - "
         .trim();
 
       // Extract region from title before cleaning it
@@ -130,6 +137,7 @@ export function parseItineraryResponse(
         title: cleanTitle || `Day ${dayNumber}`,
         description: "",
         region: lastKnownRegion,
+        transportMode,
         places: [],
       };
 
@@ -285,6 +293,7 @@ export function parseItineraryResponse(
       title: `Day ${dayNumber}`,
       description: "Free time to explore",
       region: lastKnownRegion, // Use last known region for missing days
+      transportMode: "driving", // Default transport mode for missing days
       places: [],
     });
   }

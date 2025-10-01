@@ -8,9 +8,10 @@ export function formatDrivingTimeAndDistance(
   timeInMinutes: number,
   distanceInMeters: number
 ): string {
-  // Convert minutes to HH:MM format
-  const hours = Math.floor(timeInMinutes / 60);
-  const minutes = timeInMinutes % 60;
+  // Convert minutes to HH:MM format (round to avoid decimals)
+  const totalMinutes = Math.round(timeInMinutes);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
   const timeStr = `${hours}:${minutes.toString().padStart(2, "0")}`;
 
   // Convert meters to kilometers (no decimals for >= 1km)
@@ -29,8 +30,9 @@ export function formatDrivingTimeAndDistance(
  * @returns Formatted time string like "1:23" or "0:34" for under 1 hour
  */
 export function formatTime(timeInMinutes: number): string {
-  const hours = Math.floor(timeInMinutes / 60);
-  const minutes = timeInMinutes % 60;
+  const totalMinutes = Math.round(timeInMinutes);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
 
   return `${hours}:${minutes.toString().padStart(2, "0")}`;
 }

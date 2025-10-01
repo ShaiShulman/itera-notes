@@ -16,31 +16,32 @@ const getApiKey = () => {
 };
 
 /**
- * Calculate driving directions between places
+ * Calculate directions between places with specified transport mode
  */
 export async function calculateDirections(
-  places: PlaceCoordinate[]
+  places: PlaceCoordinate[],
+  mode: string = "driving"
 ): Promise<DirectionsResponse> {
   try {
     console.log(
-      `🚗 Server Action: Calculating directions for ${places.length} places`
+      `🚗 Server Action: Calculating ${mode} directions for ${places.length} places`
     );
 
     const apiKey = getApiKey();
     const directionsService = new GoogleDirectionsService(apiKey);
 
-    const response = await directionsService.calculateDirections(places);
+    const response = await directionsService.calculateDirections(places, mode);
 
-    console.log(`✅ Server Action: Directions calculated successfully`);
+    console.log(`✅ Server Action: ${mode} directions calculated successfully`);
     return response;
   } catch (error) {
-    console.error("❌ Server Action: Error calculating directions:", error);
+    console.error(`❌ Server Action: Error calculating ${mode} directions:`, error);
     throw error;
   }
 }
 
 /**
- * Extract driving times from directions response
+ * Extract travel times from directions response
  */
 export async function extractDrivingTimes(
   directionsResponse: DirectionsResponse,
@@ -64,7 +65,8 @@ export async function extractDrivingTimes(
 
     return { times, distances };
   } catch (error) {
-    console.error("❌ Server Action: Error extracting driving data:", error);
+    console.error("❌ Server Action: Error extracting travel data:", error);
     throw error;
   }
 }
+

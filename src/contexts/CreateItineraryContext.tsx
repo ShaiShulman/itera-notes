@@ -30,6 +30,7 @@ const getDefaultFormData = (): Partial<NewItineraryForm> => {
     endDate: "",
     interests: [],
     travelStyle: undefined,
+    transportPreference: "auto",
     additionalNotes: "",
   };
 };
@@ -61,6 +62,7 @@ export function CreateItineraryProvider({ children }: { children: ReactNode }) {
             endDate: parsedData.endDate || "",
             interests: parsedData.interests || [],
             travelStyle: parsedData.travelStyle || undefined,
+            transportPreference: parsedData.transportPreference || "auto",
             additionalNotes: parsedData.additionalNotes || "",
           };
 
@@ -72,6 +74,7 @@ export function CreateItineraryProvider({ children }: { children: ReactNode }) {
             cleanedData.endDate ||
             cleanedData.interests?.length > 0 ||
             cleanedData.travelStyle ||
+            (cleanedData.transportPreference && cleanedData.transportPreference !== "auto") ||
             cleanedData.additionalNotes;
           setIsFormDirty(!!hasData);
         }
@@ -109,7 +112,8 @@ export function CreateItineraryProvider({ children }: { children: ReactNode }) {
       startDate: "",
       endDate: "",
       interests: [],
-      travelStyle: undefined,
+      travelStyle: "mid-range" as const,
+      transportPreference: "auto" as const,
       additionalNotes: "",
     };
     setFormDataState(initialData);

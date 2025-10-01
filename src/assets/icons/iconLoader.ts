@@ -32,9 +32,12 @@ export class IconLoader {
   static async preloadIcons() {
     const iconPaths = [
       '/icons/trash-bin.svg',
-      '/icons/flag.svg', 
+      '/icons/flag.svg',
       '/icons/ban.svg',
-      '/icons/lightbulb.svg'
+      '/icons/lightbulb.svg',
+      '/icons/driving.svg',
+      '/icons/transit.svg',
+      '/icons/walking.svg'
     ];
     
     // Load all icons in parallel
@@ -54,5 +57,9 @@ export const IconPaths = {
   TRASH_BIN: '/icons/trash-bin.svg',
   FLAG: '/icons/flag.svg',
   BAN: '/icons/ban.svg',
-  LIGHTBULB: '/icons/lightbulb.svg'
+  LIGHTBULB: '/icons/lightbulb.svg',
+  // Transport icons
+  DRIVING: '/icons/driving.svg',
+  TRANSIT: '/icons/transit.svg',
+  WALKING: '/icons/walking.svg'
 } as const;
