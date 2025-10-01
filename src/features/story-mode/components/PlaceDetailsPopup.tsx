@@ -2,11 +2,14 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
 import { BasePlaceBlockData } from "../../editor/types";
 import { formatDrivingTimeAndDistance } from "../../editor/utils/formatting";
 import { cleanString } from "@/utils/strings";
 import { ImageViewer } from "@/components/ui/ImageViewer";
 import { PLACE_CONFIG } from "@/config/placeConfig";
+import { TransportMode } from "@/types/transport";
+import { getTransportIconPath } from "@/utils/transportUtils";
 
 export interface PlaceDetailsPopupProps {
   placeData: BasePlaceBlockData;
@@ -14,6 +17,7 @@ export interface PlaceDetailsPopupProps {
   triggerElement?: HTMLElement;
   onClose?: () => void;
   previousPlaceName?: string; // Name of the previous place for driving time context
+  transportMode?: TransportMode; // Transport mode for the day
 }
 
 export const PlaceDetailsPopup: React.FC<PlaceDetailsPopupProps> = ({
@@ -22,6 +26,7 @@ export const PlaceDetailsPopup: React.FC<PlaceDetailsPopupProps> = ({
   triggerElement,
   onClose,
   previousPlaceName,
+  transportMode,
 }) => {
   const popupRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -143,15 +148,17 @@ export const PlaceDetailsPopup: React.FC<PlaceDetailsPopupProps> = ({
         placeData.photoReferences.length > 0 && (
           <div className="mb-3">
             <div className="grid grid-cols-2 gap-2">
-              {placeData.photoReferences.slice(0, PLACE_CONFIG.MAX_PHOTOS).map((photoRef, index) => (
-                <ImageViewer
-                  key={index}
-                  photoRef={photoRef}
-                  placeName={placeData.name || ""}
-                  width="80px"
-                  height="80px"
-                />
-              ))}
+              {placeData.photoReferences
+                .slice(0, PLACE_CONFIG.MAX_PHOTOS)
+                .map((photoRef, index) => (
+                  <ImageViewer
+                    key={index}
+                    photoRef={photoRef}
+                    placeName={placeData.name || ""}
+                    width="80px"
+                    height="80px"
+                  />
+                ))}
             </div>
           </div>
         )}
@@ -246,24 +253,19 @@ export const PlaceDetailsPopup: React.FC<PlaceDetailsPopupProps> = ({
           </div>
         )}
 
-        {/* Driving Time */}
+        {/* Driving Time with transport mode icon */}
         {placeData.drivingTimeFromPrevious &&
           placeData.drivingTimeFromPrevious > 0 &&
           !placeData.hideInMap && (
             <div className="flex items-center gap-2">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="text-gray-500 flex-shrink-0"
-              >
-                <path
-                  d="M6.62,13.08a.9.9,0,0,0-.54.54,1,1,0,0,0,1.3,1.3,1.15,1.15,0,0,0,.33-.21,1.15,1.15,0,0,0,.21-.33A.84.84,0,0,0,8,14a1.05,1.05,0,0,0-.29-.71A1,1,0,0,0,6.62,13.08Zm13.14-4L18.4,5.05a3,3,0,0,0-2.84-2H8.44A3,3,0,0,0,5.6,5.05L4.24,9.11A3,3,0,0,0,2,12v4a3,3,0,0,0,2,2.82V20a1,1,0,0,0,2,0V19H18v1a1,1,0,0,0,2,0V18.82A3,3,0,0,0,22,16V12A3,3,0,0,0,19.76,9.11ZM7.49,5.68A1,1,0,0,1,8.44,5h7.12a1,1,0,0,1,1,.68L17.61,9H6.39ZM20,16a1,1,0,0,1-1,1H5a1,1,0,0,1-1-1V12a1,1,0,0,1,1-1H19a1,1,0,0,1,1,1Zm-3.38-2.92a.9.9,0,0,0-.54.54,1,1,0,0,0,1.3,1.3.9.9,0,0,0,.54-.54A.84.84,0,0,0,18,14a1.05,1.05,0,0,0-.29-.71A1,1,0,0,0,16.62,13.08ZM13,13H11a1,1,0,0,0,0,2h2a1,1,0,0,0,0-2Z"
-                  fill="currentColor"
-                />
-              </svg>
+              <Image
+                src={getTransportIconPath(transportMode || "driving")}
+                alt={`${transportMode || "driving"} icon`}
+                width={18}
+                height={18}
+                style={{ display: "inline" }}
+                className="flex-shrink-0"
+              />
               <span className="text-gray-700 text-sm">
                 {formatDrivingTimeAndDistance(
                   placeData.drivingTimeFromPrevious,

@@ -1,22 +1,7 @@
 import type { DayBlockData } from "../types";
 import { getDayColor } from "../../map/utils/colors";
-import { IconPaths } from "@/assets/icons/iconLoader";
 import { TRANSPORT_MODE_OPTIONS, TransportMode } from "@/types/transport";
-
-/**
- * Get transport icon path for a given mode
- */
-function getTransportIconPath(mode: string = "driving"): string {
-  switch (mode.toLowerCase()) {
-    case "transit":
-      return IconPaths.TRANSIT;
-    case "walking":
-      return IconPaths.WALKING;
-    case "driving":
-    default:
-      return IconPaths.DRIVING;
-  }
-}
+import { getTransportIconPath } from "@/utils/transportUtils";
 
 // Global utility function to trigger transport mode updates
 function triggerTransportModeUpdate() {
@@ -265,14 +250,20 @@ export default class DayBlock {
       cursor: pointer;
       transition: background-color 0.2s;
       margin-right: 4px;
+      min-width: 0;
+      max-width: 100px;
     `;
+
+    // Add tooltip
+    const modeName = (this.data.transportMode || "driving").charAt(0).toUpperCase() + (this.data.transportMode || "driving").slice(1);
+    transportDisplay.title = modeName;
 
     const transportIconPath = getTransportIconPath(this.data.transportMode || "driving");
     transportDisplay.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 4px;">
-        <img src="${transportIconPath}" alt="${this.data.transportMode || "driving"} icon" width="18" height="18" style="display: inline;">
-        <span style="font-size: 11px; color: #374151; font-weight: 500;">
-          ${(this.data.transportMode || "driving").charAt(0).toUpperCase() + (this.data.transportMode || "driving").slice(1)}
+      <div style="display: flex; align-items: center; gap: 4px; min-width: 0;">
+        <img src="${transportIconPath}" alt="${this.data.transportMode || "driving"} icon" width="18" height="18" style="display: inline; flex-shrink: 0;">
+        <span style="font-size: 11px; color: #374151; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: clip; flex-shrink: 1; min-width: 0;">
+          ${modeName}
         </span>
       </div>
     `;
@@ -540,8 +531,9 @@ export default class DayBlock {
         // Update the collapsed display
         titleDisplay.textContent = this.data.title || "Click to add title...";
 
-        // Save and collapse
-        this.saveAndCollapse();
+        // Collapse (auto-save already triggered)
+        this.isExpanded = false;
+        this.renderCollapsed();
       } else if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -563,15 +555,12 @@ export default class DayBlock {
       // Small delay to ensure we're not just moving to another field in the same block
       setTimeout(() => {
         if (this.isCurrentlyEditingTitle) {
-          console.log("DayBlock: Title input focus lost, reverting edit");
+          console.log("DayBlock: Title input focus lost, committing edit");
 
-          // Revert changes
-          this.revertTitleEdit();
+          // Commit changes
+          this.commitTitleEdit();
 
-          // Update input value to reverted title
-          titleInput.value = this.currentTitleValue;
-
-          // Just collapse without saving
+          // Collapse without explicit save (auto-save already triggered)
           this.isExpanded = false;
           this.renderCollapsed();
         }
@@ -603,6 +592,7 @@ export default class DayBlock {
     `;
     dateInput.addEventListener("change", (e) => {
       this.data.date = (e.target as HTMLInputElement).value;
+      this.triggerEditorChange();
     });
 
     dateInput.addEventListener("click", (e) => {
@@ -614,7 +604,12 @@ export default class DayBlock {
       if (e.key === "Enter") {
         e.preventDefault();
         e.stopPropagation();
-        this.saveAndCollapse();
+        // Commit edits and collapse
+        if (this.isCurrentlyEditingTitle) {
+          this.commitTitleEdit();
+        }
+        this.isExpanded = false;
+        this.renderCollapsed();
       }
     });
 
@@ -692,63 +687,12 @@ export default class DayBlock {
     });
 
 
-    // Save button container (positioned bottom right)
-    const saveButtonContainer = document.createElement("div");
-    saveButtonContainer.style.cssText = `
-      display: flex;
-      justify-content: flex-end;
-      margin-top: 16px;
-    `;
-
-    const saveButton = document.createElement("button");
-    saveButton.style.cssText = `
-      background: ${dayColor};
-      color: white;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    `;
-    saveButton.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2" fill="none"/>
-        <polyline points="17,21 17,13 7,13 7,21" stroke="currentColor" stroke-width="2" fill="none"/>
-        <polyline points="7,3 7,8 15,8" stroke="currentColor" stroke-width="2" fill="none"/>
-      </svg>
-      Save
-    `;
-
-    saveButton.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.saveAndCollapse();
-    });
-
-    saveButton.addEventListener("mouseenter", () => {
-      saveButton.style.transform = "scale(1.05)";
-      saveButton.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.2)";
-    });
-
-    saveButton.addEventListener("mouseleave", () => {
-      saveButton.style.transform = "scale(1)";
-      saveButton.style.boxShadow = "none";
-    });
-
-    saveButtonContainer.appendChild(saveButton);
-
     this.wrapper.appendChild(header);
     this.wrapper.appendChild(titleInput);
     this.wrapper.appendChild(dateLabel);
     this.wrapper.appendChild(dateInput);
     this.wrapper.appendChild(transportLabel);
     this.wrapper.appendChild(transportSelector);
-    this.wrapper.appendChild(saveButtonContainer);
 
     // Focus title input after rendering
     setTimeout(() => titleInput.focus(), 100);
@@ -810,6 +754,10 @@ export default class DayBlock {
     if (this.isExpanded) {
       this.renderExpanded();
     } else {
+      // When collapsing, commit any pending title edits
+      if (this.isCurrentlyEditingTitle) {
+        this.commitTitleEdit();
+      }
       this.renderCollapsed();
     }
   }

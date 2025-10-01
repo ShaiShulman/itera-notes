@@ -22,6 +22,7 @@ import {
 import { getDayColor } from "@/features/map/utils/colors";
 import { generateAndInsertPlaceParagraph } from "../utils/placeInsertion";
 import { PLACE_CONFIG } from "@/config/placeConfig";
+import { getTransportIconPath } from "@/utils/transportUtils";
 
 // Debounce mechanism for place numbering updates
 let numberingUpdateTimeout: NodeJS.Timeout | null = null;
@@ -39,21 +40,6 @@ export function triggerPlaceNumberingUpdate() {
       window.dispatchEvent(new CustomEvent("editor:updatePlaceNumbers"));
       numberingUpdateTimeout = null;
     }, 200); // 200ms debounce
-  }
-}
-
-/**
- * Get transport icon path for a given mode
- */
-function getTransportIconPath(mode: string = "driving"): string {
-  switch (mode.toLowerCase()) {
-    case "transit":
-      return IconPaths.TRANSIT;
-    case "walking":
-      return IconPaths.WALKING;
-    case "driving":
-    default:
-      return IconPaths.DRIVING;
   }
 }
 

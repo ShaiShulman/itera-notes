@@ -1,10 +1,13 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import { getDayColor } from "../../map/utils/colors";
 import { formatDrivingTimeAndDistance } from "../../editor/utils/formatting";
 import { formatDate } from "@/utils/timeUtils";
 import { cleanString } from "@/utils/strings";
+import { TransportMode } from "@/types/transport";
+import { getTransportIconPath } from "@/utils/transportUtils";
 
 export interface StoryDayData {
   dayNumber: number;
@@ -14,6 +17,7 @@ export interface StoryDayData {
   totalDrivingTime: number; // in minutes
   totalDrivingDistance: number; // in meters
   placeCount: number;
+  transportMode?: TransportMode;
 }
 
 export interface StoryDayComponentProps {
@@ -99,21 +103,16 @@ export const StoryDayComponent: React.FC<StoryDayComponentProps> = ({
             </span>
           </div>
 
-          {/* Driving time */}
+          {/* Driving time with transport mode icon */}
           {day.totalDrivingTime > 0 && (
             <div className="flex items-center gap-1">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M6.62,13.08a.9.9,0,0,0-.54.54,1,1,0,0,0,1.3,1.3,1.15,1.15,0,0,0,.33-.21,1.15,1.15,0,0,0,.21-.33A.84.84,0,0,0,8,14a1.05,1.05,0,0,0-.29-.71A1,1,0,0,0,6.62,13.08Zm13.14-4L18.4,5.05a3,3,0,0,0-2.84-2H8.44A3,3,0,0,0,5.6,5.05L4.24,9.11A3,3,0,0,0,2,12v4a3,3,0,0,0,2,2.82V20a1,1,0,0,0,2,0V19H18v1a1,1,0,0,0,2,0V18.82A3,3,0,0,0,22,16V12A3,3,0,0,0,19.76,9.11ZM7.49,5.68A1,1,0,0,1,8.44,5h7.12a1,1,0,0,1,1,.68L17.61,9H6.39ZM20,16a1,1,0,0,1-1,1H5a1,1,0,0,1-1-1V12a1,1,0,0,1,1-1H19a1,1,0,0,1,1,1Zm-3.38-2.92a.9.9,0,0,0-.54.54,1,1,0,0,0,1.3,1.3.9.9,0,0,0,.54-.54A.84.84,0,0,0,18,14a1.05,1.05,0,0,0-.29-.71A1,1,0,0,0,16.62,13.08ZM13,13H11a1,1,0,0,0,0,2h2a1,1,0,0,0,0-2Z"
-                  fill="currentColor"
-                />
-              </svg>
+              <Image
+                src={getTransportIconPath(day.transportMode || "driving")}
+                alt={`${day.transportMode || "driving"} icon`}
+                width={18}
+                height={18}
+                style={{ display: "inline" }}
+              />
               <span>{formattedDriving}</span>
             </div>
           )}

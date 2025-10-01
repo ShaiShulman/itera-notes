@@ -219,6 +219,19 @@ export const StoryModeView: React.FC<StoryModeViewProps> = ({ editorData }) => {
     return getPreviousLocationForPlace(currentPlace, allPlacesArray);
   };
 
+  // Helper function to get transport mode for a place's day
+  const getTransportModeForPlace = (
+    currentPlace: BasePlaceBlockData
+  ): string | undefined => {
+    if (!processedContent?.days || !currentPlace.uid) return "driving";
+
+    const placeDayNumber = extractDayNumberFromPlace(currentPlace);
+    const day = processedContent.days.find(
+      (d) => d.dayData.dayNumber === placeDayNumber
+    );
+    return day?.dayData.transportMode || "driving";
+  };
+
   const handleDayHover = (isHovering: boolean, dayNumber: number) => {
     console.log("🏛️ DAY HOVER:", { dayNumber, isHovering });
 
@@ -323,12 +336,15 @@ export const StoryModeView: React.FC<StoryModeViewProps> = ({ editorData }) => {
         previousPlaceName={
           selectedPlace ? getPreviousPlaceName(selectedPlace) : undefined
         }
+        transportMode={
+          selectedPlace ? getTransportModeForPlace(selectedPlace) as any : undefined
+        }
         onClose={() => {
           setSelectedPlace(null);
           setPopupTrigger(null);
           setIsPinned(false);
           console.log("🚫 POPUP CLOSED - reset pinned state");
-          
+
           // Emit hover end event to clear map interactions
           if (typeof window !== "undefined") {
             const event = new CustomEvent("story:hoverEnd", {
@@ -570,6 +586,7 @@ function processEditorDataForStory(
       totalDrivingTime,
       totalDrivingDistance,
       placeCount: dayPlaces.length,
+      transportMode: dayData.transportMode || "driving",
     };
 
     // Collect content blocks for this day
