@@ -32,3 +32,15 @@
   line-height: 1.6;
   color: #000000;
 }
+
+/* Link styles for EditorJS paragraph inline links only */
+.ce-paragraph a {
+  color: #2563eb !important;
+  text-decoration: underline !important;
+  cursor: pointer !important;
+}
+
+.ce-paragraph a:hover {
+  color: #1d4ed8 !important;
+  text-decoration: underline !important;
+}

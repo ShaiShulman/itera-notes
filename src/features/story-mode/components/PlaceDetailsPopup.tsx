@@ -142,12 +142,12 @@ export const PlaceDetailsPopup: React.FC<PlaceDetailsPopupProps> = ({
         </button>
       </div>
 
-      {/* Images grid - show up to 4 images */}
+      {/* Images grid - show up to 2 images */}
       {placeData.placeId &&
         placeData.photoReferences &&
         placeData.photoReferences.length > 0 && (
           <div className="mb-3">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-0.5">
               {placeData.photoReferences
                 .slice(0, PLACE_CONFIG.MAX_PHOTOS)
                 .map((photoRef, index) => (
@@ -155,8 +155,8 @@ export const PlaceDetailsPopup: React.FC<PlaceDetailsPopupProps> = ({
                     key={index}
                     photoRef={photoRef}
                     placeName={placeData.name || ""}
-                    width="80px"
-                    height="80px"
+                    width="120px"
+                    height="120px"
                   />
                 ))}
             </div>

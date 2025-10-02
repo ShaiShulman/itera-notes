@@ -492,7 +492,6 @@ export function ItineraryProvider({ children }: ItineraryProviderProps) {
       clearTimeout(autoSaveTimeoutId);
     }
 
-    // Only auto-save if we have editor data and it's dirty
     if (state.editorData && state.isDirty && !state.isSaving) {
       autoSaveTimeoutId = setTimeout(async () => {
         try {

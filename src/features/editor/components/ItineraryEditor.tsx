@@ -24,6 +24,8 @@ import {
 import { triggerPlaceNumberingUpdate } from "./BasePlaceBlock";
 import HeaderBlock from "@editorjs/header";
 import ParagraphBlock from "@editorjs/paragraph";
+import Underline from "@editorjs/underline";
+import { convertMarkdownBoldToHtml } from "@/utils/textFormatting";
 import "./editorjs-global.css";
 import { MAX_ZOOM_LEVEL } from "@/features/map/components/mapSettings";
 interface EditorBlock {
@@ -666,11 +668,20 @@ export default function ItineraryEditor({
           data,
           tools: {
             header: HeaderBlock,
-            paragraph: ParagraphBlock,
+            paragraph: {
+              class: ParagraphBlock as any,
+              inlineToolbar: true,
+              config: {
+                placeholder: "Enter text...",
+                preserveBlank: false,
+              },
+            },
+            underline: Underline,
             day: DayBlock,
             place: PlaceBlock,
             hotel: HotelBlock,
           },
+          inlineToolbar: ["bold", "italic", "underline", "link"],
           onChange: async () => {
             if (onChange && editorRef.current) {
               try {
@@ -749,11 +760,14 @@ export default function ItineraryEditor({
                   insertionIndex >= 0 &&
                   insertionIndex <= editorRef.current.blocks.getBlocksCount()
                 ) {
+                  // Convert **text** markdown to <b>text</b> for bold formatting
+                  const formattedContent = convertMarkdownBoldToHtml(content);
+
                   // Insert paragraph block and then sync the place block's linkedParagraphId with the actual generated ID
                   editorRef.current.blocks.insert(
                     "paragraph",
                     {
-                      text: content,
+                      text: formattedContent,
                     },
                     {},
                     insertionIndex
@@ -1041,9 +1055,6 @@ export default function ItineraryEditor({
                     triggerPlaceNumberingUpdate();
                   }, 50); // Small delay to ensure DOM is updated
                 }
-
-                // Note: Paragraph generation for map-added places is now handled
-                // by the unified system in the map selection handler below
               }
             };
 

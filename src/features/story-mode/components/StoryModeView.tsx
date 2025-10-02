@@ -48,19 +48,19 @@ export const StoryModeView: React.FC<StoryModeViewProps> = ({ editorData }) => {
   useEffect(() => {
     const handleClickAway = (event: MouseEvent) => {
       if (!isPinned) return;
-      
+
       const target = event.target as HTMLElement;
-      
+
       // Don't close if clicking on the popup itself or an inline place name
-      if (target.closest('.fixed.z-50') || target.closest('[data-place-key]')) {
+      if (target.closest(".fixed.z-50") || target.closest("[data-place-key]")) {
         return;
       }
-      
+
       console.log("🖱️ CLICK AWAY detected - unpinning popup");
       setIsPinned(false);
       setSelectedPlace(null);
       setPopupTrigger(null);
-      
+
       // Emit hover end event to clear map interactions
       if (typeof window !== "undefined") {
         const event = new CustomEvent("story:hoverEnd", {
@@ -72,9 +72,9 @@ export const StoryModeView: React.FC<StoryModeViewProps> = ({ editorData }) => {
     };
 
     if (isPinned) {
-      document.addEventListener('click', handleClickAway);
+      document.addEventListener("click", handleClickAway);
       return () => {
-        document.removeEventListener('click', handleClickAway);
+        document.removeEventListener("click", handleClickAway);
       };
     }
   }, [isPinned]);
@@ -86,30 +86,41 @@ export const StoryModeView: React.FC<StoryModeViewProps> = ({ editorData }) => {
       console.log("🗺️ StoryModeView: Received map place click:", { uid, name });
 
       // Find the place element in the story view and scroll to it
-      const placeElement = document.querySelector(`[data-place-key*="${uid}"]`) as HTMLElement;
+      const placeElement = document.querySelector(
+        `[data-place-key*="${uid}"]`
+      ) as HTMLElement;
       if (placeElement) {
         console.log("📍 StoryModeView: Scrolling to place element:", name);
-        placeElement.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'center',
-          inline: 'nearest'
+        placeElement.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+          inline: "nearest",
         });
-        
+
         // Briefly highlight the element
-        placeElement.style.backgroundColor = '#fef3c7';
-        placeElement.style.transition = 'background-color 0.3s ease';
+        placeElement.style.backgroundColor = "#fef3c7";
+        placeElement.style.transition = "background-color 0.3s ease";
         setTimeout(() => {
-          placeElement.style.backgroundColor = '';
+          placeElement.style.backgroundColor = "";
         }, 1500);
       } else {
-        console.warn("📍 StoryModeView: Could not find place element for uid:", uid);
+        console.warn(
+          "📍 StoryModeView: Could not find place element for uid:",
+          uid
+        );
       }
     };
 
     if (typeof window !== "undefined") {
-      window.addEventListener("map:placeClicked", handleMapPlaceClick as EventListener);
+      window.addEventListener(
+        "map:placeClicked",
+        handleMapPlaceClick as EventListener
+      );
       return () => {
-        window.removeEventListener("map:placeClicked", handleMapPlaceClick as EventListener);
+        window.removeEventListener(
+          "map:placeClicked",
+          handleMapPlaceClick as EventListener
+        );
       };
     }
   }, []);
@@ -123,7 +134,7 @@ export const StoryModeView: React.FC<StoryModeViewProps> = ({ editorData }) => {
       placeName: place.name,
       isHovering,
       hasElement: !!element,
-      isPinned
+      isPinned,
     });
 
     // Don't respond to hover events when popup is pinned
@@ -176,7 +187,7 @@ export const StoryModeView: React.FC<StoryModeViewProps> = ({ editorData }) => {
     console.log("🖱️ PLACE CLICK:", {
       placeName: place.name,
       currentlyPinned: isPinned,
-      currentSelectedPlace: selectedPlace?.name
+      currentSelectedPlace: selectedPlace?.name,
     });
 
     // If clicking the same place that's already pinned, unpin it
@@ -337,7 +348,9 @@ export const StoryModeView: React.FC<StoryModeViewProps> = ({ editorData }) => {
           selectedPlace ? getPreviousPlaceName(selectedPlace) : undefined
         }
         transportMode={
-          selectedPlace ? getTransportModeForPlace(selectedPlace) as any : undefined
+          selectedPlace
+            ? (getTransportModeForPlace(selectedPlace) as any)
+            : undefined
         }
         onClose={() => {
           setSelectedPlace(null);
@@ -368,51 +381,84 @@ const ContentBlockRenderer: React.FC<{
     isHovering: boolean,
     element?: HTMLElement
   ) => void;
-  onPlaceClick: (
-    place: BasePlaceBlockData,
-    element: HTMLElement
-  ) => void;
+  onPlaceClick: (place: BasePlaceBlockData, element: HTMLElement) => void;
 }> = ({ block, allPlaces, onPlaceHover, onPlaceClick }) => {
-  // Function to render content with inline place names
+  // Function to render content with inline place names and HTML formatting
   const renderContentWithPlaces = (
     content: string,
     linkedPlaces: BasePlaceBlockData[],
     allPlaces?: Map<string, BasePlaceBlockData>
   ) => {
-    // Look for **PlaceName** patterns in the content
-    const placePattern = /\*\*([^*]+)\*\*/g;
-    const matches = Array.from(content.matchAll(placePattern));
+    // First strip all formatting tags except <b> and <strong> to handle nested tags
+    // e.g., <u class="cdx-underline"><b>text</b></u> becomes <b>text</b>
+    let processedContent = content
+      .replace(/<u[^>]*>/g, "")
+      .replace(/<\/u>/g, "")
+      .replace(/<i>/g, "")
+      .replace(/<\/i>/g, "")
+      .replace(/<em>/g, "")
+      .replace(/<\/em>/g, "");
+
+    // Now convert <b> and <strong> to **
+    processedContent = processedContent
+      .replace(/<b>/g, "**")
+      .replace(/<\/b>/g, "**")
+      .replace(/<strong>/g, "**")
+      .replace(/<\/strong>/g, "**");
+
+    console.log("🔄 Processed:", processedContent.substring(0, 200));
+
+    // Look for **text** patterns in the processed content
+    const pattern = /\*\*([^*]+)\*\*/g;
+    const matches = Array.from(processedContent.matchAll(pattern));
 
     if (matches.length === 0) {
-      return <span>{content}</span>;
+      // No place patterns, render HTML
+      return <span dangerouslySetInnerHTML={{ __html: content }} />;
     }
 
     const elements: React.ReactNode[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     let lastIndex = 0;
+    let originalIndex = 0; // Track position in original content
 
     matches.forEach((match, index) => {
-      const [fullMatch, placeName] = match;
+      const [fullMatch, text] = match;
       const matchStart = match.index!;
       const matchEnd = matchStart + fullMatch.length;
 
-      // Add text before the match
-      if (matchStart > lastIndex) {
-        elements.push(content.slice(lastIndex, matchStart));
+      // Calculate corresponding position in original content
+
+      // Find the **text** pattern in original content
+      const originalPattern = content.indexOf(`<b>${text}</b>`, originalIndex);
+      const originalPatternStrong = content.indexOf(
+        `<strong>${text}</strong>`,
+        originalIndex
+      );
+      const actualIndex =
+        originalPattern !== -1 ? originalPattern : originalPatternStrong;
+
+      // Add HTML before the match from original content
+      if (actualIndex > originalIndex) {
+        const htmlBefore = content.slice(originalIndex, actualIndex);
+        elements.push(
+          <span
+            key={`text-${index}`}
+            dangerouslySetInnerHTML={{ __html: htmlBefore }}
+          />
+        );
       }
 
-      // Find the corresponding place data
-      // First try to find by exact name match, then by shortName
+      // Check if it's a place name
       let matchingPlace: BasePlaceBlockData | undefined;
 
-      // Check linked places first (for backwards compatibility)
       matchingPlace = linkedPlaces.find(
-        (place) => place.name === placeName || place.shortName === placeName
+        (place) => place.name === text || place.shortName === text
       );
 
-      // If not found in linked places, search all places (for new **PlaceName** format)
       if (!matchingPlace && allPlaces) {
         for (const place of allPlaces.values()) {
-          if (place.name === placeName || place.shortName === placeName) {
+          if (place.name === text || place.shortName === text) {
             matchingPlace = place;
             break;
           }
@@ -421,30 +467,25 @@ const ContentBlockRenderer: React.FC<{
 
       if (matchingPlace) {
         const dataKey = `place-${matchingPlace.uid || index}-${index}`;
-        // Add the inline place component
         elements.push(
           <InlinePlaceName
             key={dataKey}
-            name={matchingPlace.name || placeName}
+            name={matchingPlace.name || text}
             shortName={matchingPlace.shortName}
             thumbnailUrl={matchingPlace.thumbnailUrl}
             placeId={matchingPlace.placeId}
-            placeType={(matchingPlace as any).__type === "hotel" ? "hotel" : "place"}
+            placeType={
+              (matchingPlace as any).__type === "hotel" ? "hotel" : "place"
+            }
             dataKey={dataKey}
             onHover={(isHovering: boolean, element?: HTMLElement) => {
-              console.log("🎯 InlinePlaceName onHover called:", {
-                placeName: matchingPlace?.name,
-                isHovering,
-                hasElement: !!element,
-              });
               onPlaceHover(matchingPlace!, isHovering, element);
             }}
             onClick={() => {
-              console.log("🖱️ InlinePlaceName onClick called:", {
-                placeName: matchingPlace?.name,
-              });
-              // Find the DOM element for this place component
-              const element = document.querySelector(`[data-place-key="${dataKey}"]`) as HTMLElement;
+              console.log("🖱️ Place clicked:", matchingPlace!.name);
+              const element = document.querySelector(
+                `[data-place-key="${dataKey}"]`
+              ) as HTMLElement;
               if (element) {
                 onPlaceClick(matchingPlace!, element);
               }
@@ -452,16 +493,26 @@ const ContentBlockRenderer: React.FC<{
           />
         );
       } else {
-        // If place not found, render as regular text without the ** markers
-        elements.push(placeName);
+        // Not a place, render as bold
+        elements.push(<strong key={`bold-${index}`}>{text}</strong>);
       }
 
+      // Update original index past the <b>text</b> or <strong>text</strong>
+      const tagLength =
+        originalPattern !== -1 ? text.length + 7 : text.length + 17; // <b></b> = 7, <strong></strong> = 17
+      originalIndex = actualIndex + tagLength;
       lastIndex = matchEnd;
     });
 
-    // Add remaining text
-    if (lastIndex < content.length) {
-      elements.push(content.slice(lastIndex));
+    // Add remaining HTML
+    if (originalIndex < content.length) {
+      const htmlAfter = content.slice(originalIndex);
+      elements.push(
+        <span
+          key={`text-final`}
+          dangerouslySetInnerHTML={{ __html: htmlAfter }}
+        />
+      );
     }
 
     return <>{elements}</>;
@@ -484,7 +535,7 @@ const ContentBlockRenderer: React.FC<{
     case "day-description":
       return (
         <div className="p-4 bg-gray-50 border-l-4 border-gray-300 rounded-r-lg">
-          <p className={`text-gray-700 ${baseClasses}`}>
+          <p className={`story-paragraph text-gray-700 ${baseClasses}`}>
             {renderContentWithPlaces(
               block.content,
               block.linkedPlaces,
@@ -497,7 +548,7 @@ const ContentBlockRenderer: React.FC<{
     case "paragraph":
     default:
       return (
-        <p className={`text-gray-800 ${baseClasses}`}>
+        <p className={`story-paragraph text-gray-800 ${baseClasses}`}>
           {renderContentWithPlaces(
             block.content,
             block.linkedPlaces,

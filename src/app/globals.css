@@ -97,3 +97,14 @@ body {
 .day-color-indicator {
   background-color: attr(data-day-color);
 }
+
+/* Link styles for Story Mode paragraphs only */
+.story-paragraph a {
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.story-paragraph a:hover {
+  color: #1d4ed8;
+}

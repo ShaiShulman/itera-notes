@@ -26,23 +26,22 @@ function excludeUIState(data: Record<string, unknown>): Record<string, unknown> 
   
   // For Editor.js text blocks, keep only essential content
   if (typeof cleaned.text === 'string') {
-    // Normalize whitespace and strip HTML tags for consistent text comparison
+    // Normalize whitespace but KEEP HTML tags (formatting is content!)
     const normalizedText = cleaned.text
       .trim()
-      .replace(/<[^>]*>/g, '') // Remove HTML tags
       .replace(/&nbsp;/g, ' ') // Replace non-breaking spaces
       .replace(/\s+/g, ' '); // Normalize multiple spaces to single space
-    
+
     // For text blocks, create a minimal object with only essential properties
     const result: Record<string, unknown> = {
       text: normalizedText,
     };
-    
+
     // Keep level for headers
     if (cleaned.level) {
       result.level = cleaned.level;
     }
-    
+
     return result;
   }
   

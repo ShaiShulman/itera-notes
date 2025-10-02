@@ -1,3 +1,5 @@
+import { convertMarkdownBoldToHtml } from '@/utils/textFormatting';
+
 export interface ParsedPlaceDescription {
   content: string;
   cleanedContent: string;
@@ -24,10 +26,8 @@ export function parsePlaceDescriptionResponse(
       cleanedContent = cleanedContent.slice(1, -1);
     }
 
-    // Remove any markdown formatting that might interfere
-    cleanedContent = cleanedContent
-      .replace(/^\*\*(.+?)\*\*$/gm, "$1") // Remove **text** at start/end of lines
-      .replace(/\*\*([^*]+)\*\*/g, "$1"); // Remove **text** inline
+    // Convert **text** markdown to <b>text</b> for bold formatting
+    cleanedContent = convertMarkdownBoldToHtml(cleanedContent);
 
     return {
       content: response,

@@ -5,6 +5,7 @@ import {
 } from "@/services/openai/itinerary";
 import { EditorData, EditorBlockData } from "@/features/editor/types";
 import { getUniqueId } from '@/utils/getUniqueId';
+import { convertMarkdownBoldToHtml } from '@/utils/textFormatting';
 
 /**
  * Converts a GeneratedItinerary from OpenAI to Editor.js format
@@ -83,10 +84,11 @@ export function convertItineraryToEditorData(
 
     blocks.push(dayBlock);
     if (day.description) {
+      const formattedDescription = convertMarkdownBoldToHtml(day.description);
       blocks.push({
         id: getUniqueId(),
         type: "paragraph",
-        data: { text: day.description },
+        data: { text: formattedDescription },
       });
     }
 
@@ -159,11 +161,13 @@ export function convertItineraryToEditorData(
         console.log(
           `📄 CREATING PARAGRAPH: "${place.name}" - paragraphId: ${paragraphId.slice(0,8)}, placeLinkedId: ${(place.linkedParagraphId || "NONE").slice(0,8)}, match: ${paragraphId === paragraphBlockId}`
         );
+
+        const formattedText = convertMarkdownBoldToHtml(place.paragraph.trim());
         blocks.push({
           id: paragraphId, // Use linked ID if available
           type: "paragraph",
           data: {
-            text: place.paragraph.trim(),
+            text: formattedText,
           },
         });
       }

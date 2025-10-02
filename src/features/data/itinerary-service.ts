@@ -25,83 +25,103 @@ export async function saveItinerary(
   const editorDataJson = JSON.stringify(request.editorData);
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      let itineraryId = request.id;
+    const result = await prisma.$transaction(
+      async (tx) => {
+        let itineraryId = request.id;
 
-      if (request.id) {
-        // Try to update existing itinerary
-        const existing = await tx.itinerary.findUnique({
-          where: { id: request.id, userId },
-          select: { hash: true },
-        });
+        if (request.id) {
+          // Try to update existing itinerary
+          const existing = await tx.itinerary.findUnique({
+            where: { id: request.id, userId },
+            select: { hash: true },
+          });
 
-        if (existing) {
-          // Itinerary exists - update it
-          // Check if content has actually changed
-          if (existing.hash === contentHash) {
-            console.log("📊 Content unchanged, skipping save");
-            return { id: request.id, success: true, unchanged: true };
+          if (existing) {
+            // Itinerary exists - update it
+            // Check if content has actually changed
+            if (existing.hash === contentHash) {
+              console.log("📊 Content unchanged, skipping save");
+              return { id: request.id, success: true, unchanged: true };
+            }
+
+            // Get the full existing itinerary to check current form metadata
+            const fullExisting = await tx.itinerary.findUnique({
+              where: { id: request.id, userId },
+              select: {
+                destination: true,
+                startDate: true,
+                endDate: true,
+                interests: true,
+                travelStyle: true,
+                additionalNotes: true,
+              },
+            });
+
+            // Update the itinerary - ensure required fields have values
+            await tx.itinerary.update({
+              where: { id: request.id, userId },
+              data: {
+                title: request.title,
+                editorData: editorDataJson,
+                hash: contentHash,
+
+                // Update form metadata if provided, otherwise keep existing or provide defaults
+                destination:
+                  request.destination !== undefined
+                    ? request.destination
+                    : fullExisting?.destination || "Unknown Destination",
+                startDate:
+                  request.startDate !== undefined
+                    ? request.startDate
+                    : fullExisting?.startDate || new Date(),
+                endDate:
+                  request.endDate !== undefined
+                    ? request.endDate
+                    : fullExisting?.endDate || new Date(),
+                interests:
+                  request.interests !== undefined
+                    ? request.interests
+                    : fullExisting?.interests || [],
+                travelStyle:
+                  request.travelStyle !== undefined
+                    ? request.travelStyle
+                    : fullExisting?.travelStyle || "mid-range",
+                additionalNotes:
+                  request.additionalNotes !== undefined
+                    ? request.additionalNotes
+                    : fullExisting?.additionalNotes,
+
+                updatedAt: new Date(),
+              },
+            });
+          } else {
+            // Itinerary doesn't exist - create it with the provided ID
+            console.log(
+              "📝 Itinerary not found, creating new one with ID:",
+              request.id
+            );
+            await tx.itinerary.create({
+              data: {
+                id: request.id, // Use the provided ID
+                userId,
+                title: request.title,
+                editorData: editorDataJson,
+                hash: contentHash,
+
+                // Include form metadata (provide defaults for required fields)
+                destination: request.destination || "Unknown Destination",
+                startDate: request.startDate || new Date(),
+                endDate: request.endDate || new Date(),
+                interests: request.interests || [],
+                travelStyle: request.travelStyle || "mid-range",
+                additionalNotes: request.additionalNotes || null,
+              },
+            });
           }
-
-          // Get the full existing itinerary to check current form metadata
-          const fullExisting = await tx.itinerary.findUnique({
-            where: { id: request.id, userId },
-            select: {
-              destination: true,
-              startDate: true,
-              endDate: true,
-              interests: true,
-              travelStyle: true,
-              additionalNotes: true,
-            },
-          });
-
-          // Update the itinerary - ensure required fields have values
-          await tx.itinerary.update({
-            where: { id: request.id, userId },
-            data: {
-              title: request.title,
-              editorData: editorDataJson,
-              hash: contentHash,
-
-              // Update form metadata if provided, otherwise keep existing or provide defaults
-              destination:
-                request.destination !== undefined
-                  ? request.destination
-                  : fullExisting?.destination || "Unknown Destination",
-              startDate:
-                request.startDate !== undefined
-                  ? request.startDate
-                  : fullExisting?.startDate || new Date(),
-              endDate:
-                request.endDate !== undefined
-                  ? request.endDate
-                  : fullExisting?.endDate || new Date(),
-              interests:
-                request.interests !== undefined
-                  ? request.interests
-                  : fullExisting?.interests || [],
-              travelStyle:
-                request.travelStyle !== undefined
-                  ? request.travelStyle
-                  : fullExisting?.travelStyle || "mid-range",
-              additionalNotes:
-                request.additionalNotes !== undefined
-                  ? request.additionalNotes
-                  : fullExisting?.additionalNotes,
-
-              updatedAt: new Date(),
-            },
-          });
         } else {
-          // Itinerary doesn't exist - create it with the provided ID
-          console.log(
-            "📝 Itinerary not found, creating new one with ID:",
-            request.id
-          );
-          await tx.itinerary.create({
+          // Create new itinerary
+          const newItinerary = await tx.itinerary.create({
             data: {
-              id: request.id, // Use the provided ID
               userId,
               title: request.title,
               editorData: editorDataJson,
@@ -116,86 +136,69 @@ export async function saveItinerary(
               additionalNotes: request.additionalNotes || null,
             },
           });
+          itineraryId = newItinerary.id;
         }
-      } else {
-        // Create new itinerary
-        const newItinerary = await tx.itinerary.create({
-          data: {
-            userId,
-            title: request.title,
-            editorData: editorDataJson,
-            hash: contentHash,
 
-            // Include form metadata (provide defaults for required fields)
-            destination: request.destination || "Unknown Destination",
-            startDate: request.startDate || new Date(),
-            endDate: request.endDate || new Date(),
-            interests: request.interests || [],
-            travelStyle: request.travelStyle || "mid-range",
-            additionalNotes: request.additionalNotes || null,
-          },
-        });
-        itineraryId = newItinerary.id;
-      }
-
-      // Handle directions if provided
-      if (request.directions && request.directions.length > 0) {
-        // Delete existing directions for this itinerary
-        await tx.itineraryDirections.deleteMany({
-          where: { itineraryId: itineraryId! },
-        });
-
-        // Filter and validate directions data
-        const validDirections = request.directions.filter((direction) => {
-          // Validate that all required fields are present and valid
-          if (
-            typeof direction.dayIndex !== "number" ||
-            direction.dayIndex < 0
-          ) {
-            console.warn(
-              "Skipping direction with invalid dayIndex:",
-              direction.dayIndex
-            );
-            return false;
-          }
-          if (!direction.color || typeof direction.color !== "string") {
-            console.warn(
-              "Skipping direction with invalid color:",
-              direction.color
-            );
-            return false;
-          }
-          if (!direction.directionsResult) {
-            console.warn("Skipping direction with no directionsResult");
-            return false;
-          }
-          return true;
-        });
-
-        if (validDirections.length > 0) {
-          // Insert new directions
-          const directionsData = validDirections.map((direction) => ({
-            itineraryId: itineraryId!,
-            dayIndex: direction.dayIndex,
-            color: direction.color,
-            directionsResult: JSON.stringify(direction.directionsResult),
-          }));
-
-          console.log(
-            `💾 Saving ${directionsData.length} valid directions (filtered from ${request.directions.length})`
-          );
-          await tx.itineraryDirections.createMany({
-            data: directionsData,
+        // Handle directions if provided
+        if (request.directions && request.directions.length > 0) {
+          // Delete existing directions for this itinerary
+          await tx.itineraryDirections.deleteMany({
+            where: { itineraryId: itineraryId! },
           });
-        } else {
-          console.warn("⚠️ No valid directions to save after filtering");
-        }
-      }
 
-      return { id: itineraryId!, unchanged: false };
-    }, {
-      timeout: 15000 // Increase timeout to 15 seconds
-    });
+          // Filter and validate directions data
+          const validDirections = request.directions.filter((direction) => {
+            // Validate that all required fields are present and valid
+            if (
+              typeof direction.dayIndex !== "number" ||
+              direction.dayIndex < 0
+            ) {
+              console.warn(
+                "Skipping direction with invalid dayIndex:",
+                direction.dayIndex
+              );
+              return false;
+            }
+            if (!direction.color || typeof direction.color !== "string") {
+              console.warn(
+                "Skipping direction with invalid color:",
+                direction.color
+              );
+              return false;
+            }
+            if (!direction.directionsResult) {
+              console.warn("Skipping direction with no directionsResult");
+              return false;
+            }
+            return true;
+          });
+
+          if (validDirections.length > 0) {
+            // Insert new directions
+            const directionsData = validDirections.map((direction) => ({
+              itineraryId: itineraryId!,
+              dayIndex: direction.dayIndex,
+              color: direction.color,
+              directionsResult: JSON.stringify(direction.directionsResult),
+            }));
+
+            console.log(
+              `💾 Saving ${directionsData.length} valid directions (filtered from ${request.directions.length})`
+            );
+            await tx.itineraryDirections.createMany({
+              data: directionsData,
+            });
+          } else {
+            console.warn("⚠️ No valid directions to save after filtering");
+          }
+        }
+
+        return { id: itineraryId!, unchanged: false };
+      },
+      {
+        timeout: 15000, // Increase timeout to 15 seconds
+      }
+    );
 
     if (result.unchanged) {
       return { id: result.id, success: true };
