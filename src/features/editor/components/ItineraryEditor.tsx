@@ -1515,16 +1515,15 @@ export default function ItineraryEditor({
                     );
                     const uid = `place_${dayNumber}_${placeIndex}`;
 
-                    // Create minimal place data - let the block discover the full details
+                    // Pass complete place data from map (no need to re-fetch)
                     const placeData = {
-                      name: place.name,
-                      uid: uid,
-                      // Don't include placeId, address, etc. - let the block find these through autocomplete flow
+                      ...place, // Keep all fields: placeId, lat, lng, address, photos, rating, etc.
+                      uid: uid, // Add/override the UID
                       isExpanded: false, // Don't expand newly added places
                     };
 
                     console.log(
-                      `📝 Adding place to editor: ${placeName} with UID: ${uid}`
+                      `📝 Adding place to editor with complete data: ${placeName} (placeId: ${place.placeId?.slice(0, 20)}..., coords: ${place.lat}, ${place.lng})`
                     );
 
                     // Trigger the add block event
@@ -1540,7 +1539,7 @@ export default function ItineraryEditor({
                     holderRef.current?.dispatchEvent(event);
 
                     console.log(
-                      `📝 Map-added place will discover its details through normal autocomplete flow and generate its own paragraph`
+                      `📝 Map-added place has complete data - will generate paragraph immediately`
                     );
                   }
                 });

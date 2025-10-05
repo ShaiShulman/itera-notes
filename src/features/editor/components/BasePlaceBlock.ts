@@ -504,12 +504,26 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
       transition: all 0.2s ease;
     `;
 
-    // Start in editing mode if no place is set OR if we have a name but no placeId (map-added place)
-    const shouldStartEditing = !this.data.placeId;
+    // Determine if place has complete data (from map or previous save)
+    const hasCompleteData = !!(this.data.placeId && this.data.lat && this.data.lng);
+
+    // Only start editing if data is incomplete (manually added places)
+    const shouldStartEditing = !hasCompleteData;
 
     // Use setTimeout to ensure DOM is fully updated before calculating place numbers
     setTimeout(() => {
       this.renderCollapsed(shouldStartEditing);
+
+      // Generate paragraph for map-added places with complete data (but no existing paragraph)
+      // This runs only on first render, not on page reload (which has linkedParagraphId)
+      if (this.blockType === "Place" && hasCompleteData && !this.data.linkedParagraphId) {
+        console.log(
+          `✅ ${this.blockType}: Map-added place has complete data and no linked paragraph - triggering generation for "${this.data.name}"`
+        );
+        setTimeout(() => {
+          this.generatePlaceParagraph();
+        }, 100);
+      }
     }, 0);
 
     // Add click handler for expand/collapse (only when not editing)
@@ -1237,7 +1251,8 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
           placeInput.select();
         }
 
-        // Auto-search for map-added places: if we have a name but no placeId, automatically search for the place
+        // Auto-search ONLY for incomplete places (manually added, not from map)
+        // Map-added places now have placeId, so this won't trigger for them
         if (this.data.name && !this.data.placeId && this.autocompleteInstance) {
           // Trigger the autocomplete search as if user pressed Enter
           // This will use the existing onFreeTextSearch handler which includes paragraph generation
@@ -2994,6 +3009,7 @@ export abstract class BasePlaceBlock<T extends BasePlaceBlockData> {
           placeAddress: this.data.address,
           dayNumber: dayNumber,
           editorElement: editorElement,
+          existingLinkedParagraphId: this.data.linkedParagraphId, // Reuse existing ID if editing
         },
         (content: string) => {
           // Find the parent Editor.js block for proper insertion positioning

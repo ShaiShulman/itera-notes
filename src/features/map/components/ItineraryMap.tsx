@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoogleMap } from "./GoogleMap";
 import { MapPlace } from "../types";
 import {
@@ -8,6 +8,8 @@ import {
   createEditorDataHash,
 } from "../utils/dataTransform";
 import { useItinerary } from "@/contexts/ItineraryContext";
+import { TripDaysLegend } from "./TripDaysLegend";
+import { RouteToggleButton } from "./RouteToggleButton";
 
 interface EditorBlock {
   type: string;
@@ -29,7 +31,10 @@ export function ItineraryMap({
 }: ItineraryMapProps) {
   const { state, setSelectedPlace } = useItinerary();
   const selectedPlace = state.selectedPlace;
-  const [isLegendCollapsed, setIsLegendCollapsed] = useState(false);
+
+  // Initialize with all days visible
+  const [visibleDays, setVisibleDays] = useState<Set<number>>(new Set());
+  const [routesVisible, setRoutesVisible] = useState(true);
 
   // Create a stable hash to prevent unnecessary re-renders
   const dataHash = useMemo(() => {
@@ -54,15 +59,8 @@ export function ItineraryMap({
       // Add directions data if available
       if (directionsData && directionsData.length > 0) {
         result.directions = directionsData;
-        console.log(
-          `🗺️ [${timestamp}] ItineraryMap: Added ${directionsData.length} direction routes to result`
-        );
       }
 
-      console.log(
-        `🗺️ [${timestamp}] ItineraryMap: transformation result:`,
-        result
-      );
       return result;
     }
 
@@ -72,12 +70,18 @@ export function ItineraryMap({
       places: [],
       directions: directionsData || [],
     };
-    console.log(
-      `🗺️ [${timestamp}] ItineraryMap: returning empty result:`,
-      emptyResult
-    );
     return emptyResult;
   }, [dataHash, directionsData]); // Back to using hash for optimization
+
+  // Update visible days when days change
+  useEffect(() => {
+    const currentDayIndices = new Set(mapData.days.map((_, idx) => idx));
+
+    // Initialize if empty, or add new days to visible set
+    if (visibleDays.size === 0 || currentDayIndices.size !== visibleDays.size) {
+      setVisibleDays(currentDayIndices);
+    }
+  }, [mapData.days.length]);
 
   const handlePlaceClick = useCallback(
     (place: MapPlace | null) => {
@@ -110,74 +114,42 @@ export function ItineraryMap({
 
   const handleMapReady = useCallback((map: google.maps.Map) => {
     console.log("Map ready:", map);
-    // Store map reference if needed for future operations
+    // DirectionsPolyRenderer is already created by GoogleMap, we just get the reference
   }, []);
+
+  const handleRouteToggle = useCallback(
+    (visible: boolean) => {
+      setRoutesVisible(visible);
+      // The GoogleMap component will handle showing/hiding routes through its own directionsRendererRef
+    },
+    []
+  );
+
+  const handleVisibilityChange = useCallback(
+    (newVisibleDays: Set<number>) => {
+      setVisibleDays(newVisibleDays);
+      // The GoogleMap component will handle re-rendering markers and routes through its effects
+    },
+    []
+  );
 
   return (
     <div className={`relative ${className}`}>
-      {/* Map Legend - Positioned lower and collapsible */}
+      {/* Route Toggle Button and Trip Days Legend */}
       {mapData.days.length > 0 && (
-        <div className="absolute bottom-4 left-4 z-10 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg border max-w-xs">
-          {/* Legend Header with Collapse Button */}
-          <div className="flex items-center justify-between p-3 pb-2">
-            <div className="text-sm font-medium text-slate-700">
-              Trip Days ({mapData.days.length})
-            </div>
-            <button
-              onClick={() => setIsLegendCollapsed(!isLegendCollapsed)}
-              className="p-1 hover:bg-slate-100 rounded transition-colors"
-              aria-label={
-                isLegendCollapsed ? "Expand legend" : "Collapse legend"
-              }
-            >
-              <svg
-                className={`w-4 h-4 text-slate-600 transition-transform ${
-                  isLegendCollapsed ? "rotate-180" : ""
-                }`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-          </div>
+        <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2 items-start">
+          {/* Route Toggle Button */}
+          <RouteToggleButton
+            routesVisible={routesVisible}
+            onToggle={handleRouteToggle}
+          />
 
-          {/* Legend Content - Collapsible */}
-          {!isLegendCollapsed && (
-            <div className="px-3 pb-3 space-y-2 max-h-48 overflow-y-auto">
-              {mapData.days.map((day) => (
-                <div
-                  key={day.index}
-                  className="flex items-center gap-2 text-xs"
-                >
-                  <div
-                    className="w-3 h-3 rounded-full border border-white shadow-sm flex-shrink-0 day-color-indicator"
-                    data-day-color={day.color}
-                    aria-label={`Day color: ${day.color}`}
-                  />
-                  <span className="text-slate-600 truncate">
-                    {day.title} {day.date && `(${day.date})`}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Places Count */}
-      {mapData.places.length > 0 && (
-        <div className="absolute top-4 right-4 z-10 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow-lg border">
-          <div className="text-xs text-slate-600">
-            {mapData.places.length} place
-            {mapData.places.length !== 1 ? "s" : ""}
-          </div>
+          {/* Trip Days Legend */}
+          <TripDaysLegend
+            days={mapData.days}
+            visibleDays={visibleDays}
+            onVisibilityChange={handleVisibilityChange}
+          />
         </div>
       )}
 
@@ -187,6 +159,8 @@ export function ItineraryMap({
         onMapReady={handleMapReady}
         onRefreshDirections={onRefreshDirections}
         selectedPlace={selectedPlace}
+        visibleDays={visibleDays}
+        routesVisible={routesVisible}
         className="w-full h-full"
       />
     </div>

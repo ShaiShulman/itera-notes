@@ -37,6 +37,8 @@ export interface MapProps {
   onMapReady?: (map: google.maps.Map) => void;
   onRefreshDirections?: () => Promise<void>;
   selectedPlace?: { uid: string; dayIndex: number } | null;
+  visibleDays?: Set<number>;
+  routesVisible?: boolean;
   className?: string;
 }
 

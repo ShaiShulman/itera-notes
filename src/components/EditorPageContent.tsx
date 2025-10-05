@@ -85,6 +85,7 @@ export default function EditorPageContent() {
 
   // Save status tracking
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Update save status based on itinerary state
   useEffect(() => {
@@ -174,8 +175,9 @@ export default function EditorPageContent() {
 
   // Create refresh directions callback
   const handleRefreshDirections = useCallback(async () => {
-    if (!editorRefreshFnRef.current) return;
+    if (!editorRefreshFnRef.current || isRefreshing) return;
 
+    setIsRefreshing(true);
     try {
       const result = await editorRefreshFnRef.current();
       const { directions, updatedPlaces } = result;
@@ -194,8 +196,10 @@ export default function EditorPageContent() {
     } catch (error) {
       console.error("🚗 Editor page: Error refreshing directions:", error);
       // TODO: Show user error notification
+    } finally {
+      setIsRefreshing(false);
     }
-  }, []);
+  }, [isRefreshing, setDirectionsData]);
 
   // Memoize the blocks data to prevent unnecessary map re-renders
   const memoizedBlocks = useMemo(
@@ -256,9 +260,34 @@ export default function EditorPageContent() {
 
             {/* Map Section */}
             <div className="flex flex-col h-full bg-white">
-              <div className="flex items-center px-4 py-3 bg-slate-800 text-white flex-shrink-0">
-                <MapIcon className="h-5 w-5 text-green-400 mr-2" />
-                <h2 className="text-base font-semibold">Interactive Map</h2>
+              <div className="flex items-center justify-between px-4 py-[9px] bg-slate-800 text-white flex-shrink-0">
+                <div className="flex items-center">
+                  <MapIcon className="h-5 w-5 text-green-400 mr-2" />
+                  <h2 className="text-base font-semibold">Interactive Map</h2>
+                </div>
+
+                {/* Refresh Routes Button */}
+                <button
+                  onClick={handleRefreshDirections}
+                  disabled={isRefreshing || !localEditorData?.blocks?.length}
+                  className="flex items-center gap-2 px-3 py-[5px] bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
+                  title="Calculate driving directions"
+                >
+                  <svg
+                    className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  {isRefreshing ? "Calculating..." : "Refresh Routes"}
+                </button>
               </div>
               <div className="flex-1 min-h-0">
                 <ItineraryMap

@@ -54,7 +54,7 @@ export class DirectionsPolyRenderer {
           geodesic: useGeodesic,
           strokeColor: directionData.color,
           strokeOpacity: 0.8,
-          strokeWeight: 4,
+          strokeWeight: 2,
         };
 
         // Add slight styling variation for multiple segments (optional)
@@ -307,7 +307,7 @@ export class DirectionsPolyRenderer {
           geodesic: useGeodesic,
           strokeColor: directionData.color,
           strokeOpacity: 0.8,
-          strokeWeight: 4,
+          strokeWeight: 2,
         };
 
         // Use dashed line for fallback straight-line routes
@@ -415,11 +415,10 @@ export class DirectionsPolyRenderer {
         polylines.forEach((polyline) => {
           polyline.setVisible(shouldShow);
           if (shouldShow) {
-            polyline.setOptions({ strokeWeight: 6, strokeOpacity: 0.9 });
+            polyline.setOptions({ strokeWeight: 5, strokeOpacity: 0.9 });
           }
         });
       });
-      console.log(`🎨 DirectionsPolyRenderer: Routes hidden, showing only selected day ${selectedDayIndex !== undefined ? selectedDayIndex + 1 : 'none'}`);
       return;
     }
 
@@ -429,7 +428,6 @@ export class DirectionsPolyRenderer {
         strokeWeight: 1,
         strokeOpacity: 0.4
       });
-      console.log('🎨 DirectionsPolyRenderer: Reset all lines to thin styling');
       return;
     }
 
@@ -437,17 +435,13 @@ export class DirectionsPolyRenderer {
     this.polylinesByDay.forEach((polylines, dayIndex) => {
       const isSelected = dayIndex === selectedDayIndex;
       const styles = isSelected
-        ? { strokeWeight: 6, strokeOpacity: 0.9 } // Thick lines for selected day
-        : { strokeWeight: 4, strokeOpacity: 0.4 }; // Thicker lines for other days
+        ? { strokeWeight: 5, strokeOpacity: 0.9 } // Thicker lines for selected day
+        : { strokeWeight: 2, strokeOpacity: 0.4 }; // Normal thin lines for other days
 
       polylines.forEach((polyline) => {
         polyline.setOptions(styles);
         polyline.setVisible(true); // Ensure visible when routes are shown
       });
-
-      console.log(
-        `🎨 DirectionsPolyRenderer: Updated day ${dayIndex + 1} (${isSelected ? 'SELECTED' : 'dimmed'}) - ${polylines.length} polylines`
-      );
     });
   }
 
@@ -456,14 +450,13 @@ export class DirectionsPolyRenderer {
    */
   setRoutesVisible(visible: boolean, selectedDayIndex?: number): void {
     this.routesVisible = visible;
-    
+
     if (visible) {
       // Show all routes and apply current styling
       this.polylines.forEach((polyline) => {
         polyline.setVisible(true);
       });
       this.updateDaySpecificStyles(selectedDayIndex);
-      console.log('🎨 DirectionsPolyRenderer: Routes shown');
     } else {
       // Hide all routes except selected day
       this.polylinesByDay.forEach((polylines, dayIndex) => {
@@ -472,7 +465,6 @@ export class DirectionsPolyRenderer {
           polyline.setVisible(shouldShow);
         });
       });
-      console.log(`🎨 DirectionsPolyRenderer: Routes hidden, showing only selected day ${selectedDayIndex !== undefined ? selectedDayIndex + 1 : 'none'}`);
     }
   }
 

@@ -32,6 +32,8 @@ export const GoogleMap = React.memo(
     onMapReady,
     onRefreshDirections,
     selectedPlace,
+    visibleDays,
+    routesVisible = true,
     className = "",
   }: MapProps) {
     console.log("GoogleMap component rendering, data:", data);
@@ -56,7 +58,6 @@ export const GoogleMap = React.memo(
       placeData: null,
       isLoading: false,
     });
-    const [routesVisible, setRoutesVisible] = useState(true);
 
     // Get the itinerary context at the component level
     const { addPlace } = useItinerary();
@@ -470,54 +471,51 @@ export const GoogleMap = React.memo(
 
       const { map, markers } = mapInstanceRef.current;
 
-      // Create a stable hash of the places data to avoid unnecessary marker recreation
+      // Create a stable hash of the places data to check if markers need recreation
       const placesHash = JSON.stringify(
         data.places.map((p) => ({
           uid: p.uid,
           name: p.name,
           coordinates: p.coordinates,
           hideInMap: p.hideInMap,
+          dayIndex: p.dayIndex,
         }))
       );
 
-      // Check if markers need to be recreated
+      // Check if places data changed (requires full marker recreation)
       const lastPlacesHash = mapInstanceRef.current.lastPlacesHash;
-      if (lastPlacesHash === placesHash) {
+      const placesDataChanged = lastPlacesHash !== placesHash;
+
+      if (placesDataChanged) {
         console.log(
-          `🗺️ GoogleMap: Skipping marker update - places data unchanged`
+          `🗺️ GoogleMap: Recreating ${data.places.length} markers - places data changed`
         );
-        return;
-      }
+        mapInstanceRef.current.lastPlacesHash = placesHash;
 
-      console.log(
-        `🗺️ GoogleMap: Updating ${data.places.length} markers - data changed`
-      );
-      mapInstanceRef.current.lastPlacesHash = placesHash;
+        // Clear existing markers
+        markers.forEach((marker) => marker.setMap(null));
+        markers.length = 0;
 
-      // Clear existing markers
-      markers.forEach((marker) => marker.setMap(null));
-      markers.length = 0;
+        // Add markers for each place
+        data.places.forEach((place, index) => {
+          if (
+            !place.coordinates ||
+            typeof place.coordinates.lat !== "number" ||
+            typeof place.coordinates.lng !== "number" ||
+            isNaN(place.coordinates.lat) ||
+            isNaN(place.coordinates.lng)
+          ) {
+            console.log(
+              `⚠️ Place ${place.name} has invalid coordinates, skipping`
+            );
+            return;
+          }
 
-      // Add markers for each place
-      data.places.forEach((place, index) => {
-        if (
-          !place.coordinates ||
-          typeof place.coordinates.lat !== "number" ||
-          typeof place.coordinates.lng !== "number" ||
-          isNaN(place.coordinates.lat) ||
-          isNaN(place.coordinates.lng)
-        ) {
-          console.log(
-            `⚠️ Place ${place.name} has invalid coordinates, skipping`
-          );
-          return;
-        }
-
-        // Skip places that are hidden from map
-        if (place.hideInMap) {
-          console.log(`👁️ Skipping hidden place: ${place.name}`);
-          return;
-        }
+          // Skip places that are hidden from map
+          if (place.hideInMap) {
+            console.log(`👁️ Skipping hidden place: ${place.name}`);
+            return;
+          }
 
         // Use place-specific color or fallback to day color or default
         const color =
@@ -557,6 +555,10 @@ export const GoogleMap = React.memo(
           animation: google.maps.Animation.DROP,
         });
 
+        // Store dayIndex in marker for efficient visibility toggling
+        (marker as any).dayIndex = place.dayIndex;
+        (marker as any).placeUid = place.uid;
+
         // Add click listener
         marker.addListener("click", () => {
           if (onPlaceClick) {
@@ -565,10 +567,20 @@ export const GoogleMap = React.memo(
         });
 
         markers.push(marker);
-        console.log(`📍 Marker ${markerDisplay}: ${place.name} (${color})`);
       });
+      } else {
+        // Places data hasn't changed, just update marker visibility based on visibleDays
+        markers.forEach((marker) => {
+          const dayIndex = (marker as any).dayIndex;
+          const shouldBeVisible = dayIndex === undefined || !visibleDays || visibleDays.has(dayIndex);
 
-      console.log(`✅ Created ${markers.length} markers`);
+          // Only update if visibility changed
+          const currentlyVisible = marker.getMap() !== null;
+          if (shouldBeVisible !== currentlyVisible) {
+            marker.setMap(shouldBeVisible ? map : null);
+          }
+        });
+      }
 
       // Adjust map bounds if there are places and auto-bounds is enabled
       if (data.places.length > 0 && RESET_MAP_BOUNDS_ON_UPDATE) {
@@ -580,7 +592,9 @@ export const GoogleMap = React.memo(
             typeof place.coordinates.lng === "number" &&
             !isNaN(place.coordinates.lat) &&
             !isNaN(place.coordinates.lng) &&
-            !place.hideInMap // Exclude hidden places from bounds
+            !place.hideInMap && // Exclude hidden places from bounds
+            // Exclude places from hidden days
+            (place.dayIndex === undefined || !visibleDays || visibleDays.has(place.dayIndex))
           );
         });
 
@@ -613,7 +627,7 @@ export const GoogleMap = React.memo(
       }
 
       mapInstanceRef.current.markers = markers;
-    }, [data, isLoaded, onPlaceClick]);
+    }, [data, isLoaded, onPlaceClick, visibleDays]);
 
     // Update directions when directions data changes
     useEffect(() => {
@@ -643,16 +657,21 @@ export const GoogleMap = React.memo(
         // Clear existing polylines
         directionsRendererRef.current.clearPolylines();
 
-        // Render new directions if available
-        if (data.directions && data.directions.length > 0) {
-          directionsRendererRef.current.renderDirections(data.directions);
+        // Render new directions if available and routes are visible
+        if (data.directions && data.directions.length > 0 && routesVisible) {
+          // Filter directions based on visible days
+          const visibleDirections = visibleDays
+            ? data.directions.filter((direction) => visibleDays.has(direction.dayIndex))
+            : data.directions;
+
+          directionsRendererRef.current.renderDirections(visibleDirections);
         }
       }
 
       console.log(
         "🔄 Directions useEffect completed - using DirectionsPolyRenderer"
       );
-    }, [data.directions, isLoaded]);
+    }, [data.directions, isLoaded, visibleDays, routesVisible]);
 
     // Handle place selection for map centering and marker animation
     useEffect(() => {
@@ -766,77 +785,11 @@ export const GoogleMap = React.memo(
 
     return (
       <div className={`relative ${className}`}>
-        {/* Map Header */}
-        <div className="absolute top-0 left-0 right-0 z-10 bg-white/90 backdrop-blur-sm border-b border-slate-200 rounded-t-lg p-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              <span className="text-sm font-medium text-slate-700">
-                Interactive Map
-              </span>
-            </div>
-
-            {/* Refresh Button */}
-            <button
-              onClick={handleRefresh}
-              disabled={isRefreshing || data.places.length === 0}
-              className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
-              title="Calculate driving directions"
-            >
-              <svg
-                className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              {isRefreshing ? "Calculating..." : "Refresh Routes"}
-            </button>
-          </div>
-        </div>
-
-        <div ref={setMapRef} className="w-full h-full rounded-lg pt-12" />
-
-        {/* Route Toggle Button - Positioned on right side, vertically centered */}
-        <button
-          onClick={() => {
-            const newVisibility = !routesVisible;
-            setRoutesVisible(newVisibility);
-            if (directionsRendererRef.current) {
-              directionsRendererRef.current.setRoutesVisible(
-                newVisibility,
-                selectedPlace?.dayIndex
-              );
-            }
-          }}
-          className={`absolute right-4 top-1/2 transform -translate-y-1/2 z-20 flex items-center gap-2 px-3 py-2 ${
-            routesVisible
-              ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-              : "bg-gray-300 hover:bg-gray-400 text-gray-700"
-          } rounded-lg text-sm font-medium transition-colors shadow-lg`}
-          title={routesVisible ? "Hide routes" : "Show routes"}
-        >
-          <Image
-            src="/icons/route.svg"
-            alt="Route"
-            width={20}
-            height={20}
-            className="w-5 h-5"
-            style={{
-              filter: routesVisible ? "brightness(0) invert(1)" : "none",
-            }}
-          />
-        </button>
+        <div ref={setMapRef} className="w-full h-full rounded-lg" />
 
         {/* Loading overlay */}
         {!isLoaded && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-100 rounded-lg pt-12">
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-100 rounded-lg">
             <div className="text-center p-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
               <p className="text-slate-600 font-medium">Loading Map...</p>
@@ -846,7 +799,7 @@ export const GoogleMap = React.memo(
 
         {/* No places overlay */}
         {isLoaded && data.places.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 rounded-lg pt-12">
+          <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 rounded-lg">
             <div className="text-center p-8">
               <div className="text-slate-400 mb-4">
                 <svg
@@ -877,30 +830,36 @@ export const GoogleMap = React.memo(
           </div>
         )}
 
-        {/* Add Place Popup */}
+        {/* Backdrop overlay - within map */}
+        {placePopup.isOpen && (
+          <div
+            className="absolute inset-0 bg-black/20 backdrop-blur-[2px] z-40 pointer-events-auto"
+            onClick={closePopup}
+          />
+        )}
+
+        {/* Add Place Drawer (Bottom) - within map */}
         {placePopup.isOpen && placePopup.position && (
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-            <div className="relative pointer-events-auto">
-              <AddPlacePopup
-                isOpen={placePopup.isOpen}
-                position={placePopup.position}
-                placeName={placePopup.placeName}
-                placeData={placePopup.placeData}
-                isLoading={placePopup.isLoading}
-                onClose={closePopup}
-                onAddToDay={(dayNumber, place) => {
-                  console.log(
-                    `🗺️ GoogleMap: Adding place to Day ${dayNumber}:`,
-                    place
-                  );
+          <div className="absolute bottom-0 left-0 right-0 z-50 pointer-events-auto">
+            <AddPlacePopup
+              isOpen={placePopup.isOpen}
+              position={placePopup.position}
+              placeName={placePopup.placeName}
+              placeData={placePopup.placeData}
+              isLoading={placePopup.isLoading}
+              onClose={closePopup}
+              onAddToDay={(dayNumber, place) => {
+                console.log(
+                  `🗺️ GoogleMap: Adding place to Day ${dayNumber}:`,
+                  place
+                );
 
-                  // Use the ItineraryContext to add the place
-                  addPlace(dayNumber, place);
+                // Use the ItineraryContext to add the place
+                addPlace(dayNumber, place);
 
-                  closePopup();
-                }}
-              />
-            </div>
+                closePopup();
+              }}
+            />
           </div>
         )}
       </div>
@@ -908,7 +867,7 @@ export const GoogleMap = React.memo(
   },
   (prevProps, nextProps) => {
     // Custom comparison to prevent unnecessary re-renders
-    // Only re-render if places data, selectedPlace, or className actually changed
+    // Only re-render if places data, selectedPlace, visibleDays, routesVisible, or className actually changed
     const placesEqual =
       JSON.stringify(prevProps.data.places) ===
       JSON.stringify(nextProps.data.places);
@@ -919,24 +878,22 @@ export const GoogleMap = React.memo(
       prevProps.selectedPlace?.uid === nextProps.selectedPlace?.uid &&
       prevProps.selectedPlace?.dayIndex === nextProps.selectedPlace?.dayIndex;
     const classNameEqual = prevProps.className === nextProps.className;
+    const routesVisibleEqual = prevProps.routesVisible === nextProps.routesVisible;
+
+    // Compare visibleDays Sets
+    const visibleDaysEqual =
+      prevProps.visibleDays === nextProps.visibleDays ||
+      (prevProps.visibleDays?.size === nextProps.visibleDays?.size &&
+        Array.from(prevProps.visibleDays || []).every((day) => nextProps.visibleDays?.has(day)));
 
     const shouldRerender = !(
       placesEqual &&
       directionsEqual &&
       selectedPlaceEqual &&
-      classNameEqual
+      classNameEqual &&
+      visibleDaysEqual &&
+      routesVisibleEqual
     );
-
-    if (shouldRerender) {
-      console.log("🗺️ GoogleMap re-rendering due to:", {
-        placesEqual,
-        directionsEqual,
-        selectedPlaceEqual,
-        classNameEqual,
-        prevSelectedPlace: prevProps.selectedPlace,
-        nextSelectedPlace: nextProps.selectedPlace,
-      });
-    }
 
     return !shouldRerender;
   }
