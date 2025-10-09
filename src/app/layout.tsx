@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Righteous } from "next/font/google";
 import "./globals.css";
 import MainLayout from "@/components/layout/MainLayout";
 import { ItineraryProvider } from "@/contexts/ItineraryContext";
@@ -17,8 +17,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const righteous = Righteous({
+  variable: "--font-righteous",
+  subsets: ["latin"],
+  weight: "400",
+});
+
 export const metadata: Metadata = {
-  title: "BreadCrumbs.ai",
+  title: "BreadCrumbs | Your Intelligent Travel Planner",
   description:
     "Plan your travel itineraries with our intelligent, places-aware notebook and interactive map visualization.",
   keywords: [
@@ -39,9 +45,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="h-full">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${righteous.variable} antialiased h-full`}
       >
         <SessionProvider>
           <AuthProvider>

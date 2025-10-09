@@ -39,11 +39,12 @@ const navigationItems = [
 export default function TopNavigation() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const { hasItineraries, lastViewedItineraryId, isLoading } = useUserItineraries();
+  const { hasItineraries, lastViewedItineraryId, isLoading } =
+    useUserItineraries();
 
   return (
-    <nav className="bg-slate-900 border-b border-slate-700 shadow-lg">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <nav className="bg-slate-900 border-b border-slate-700 shadow-md">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex items-center">
@@ -55,8 +56,8 @@ export default function TopNavigation() {
                 height={50}
                 className="h-13 w-13"
               />
-              <h1 className="text-3xl font-bold text-white tracking-tight">
-                BreadCrumbs.ai
+              <h1 className="text-3xl font-bold text-white tracking-wide font-[family-name:var(--font-righteous)]">
+                BreadCrumbs
               </h1>
             </div>
           </div>
@@ -67,13 +68,14 @@ export default function TopNavigation() {
               {session &&
                 navigationItems.map((item) => {
                   const isActive = pathname === item.href;
-                  
+
                   // Special handling for Itinerary Editor
                   if (item.name === "Itinerary Editor") {
                     const isDisabled = !isLoading && hasItineraries === false;
-                    const editorHref = hasItineraries && lastViewedItineraryId 
-                      ? `/editor/${lastViewedItineraryId}`
-                      : item.href;
+                    const editorHref =
+                      hasItineraries && lastViewedItineraryId
+                        ? `/editor/${lastViewedItineraryId}`
+                        : item.href;
 
                     if (isDisabled) {
                       return (
@@ -200,13 +202,14 @@ export default function TopNavigation() {
           {session &&
             navigationItems.map((item) => {
               const isActive = pathname === item.href;
-              
+
               // Special handling for Itinerary Editor
               if (item.name === "Itinerary Editor") {
                 const isDisabled = !isLoading && hasItineraries === false;
-                const editorHref = hasItineraries && lastViewedItineraryId 
-                  ? `/editor/${lastViewedItineraryId}`
-                  : item.href;
+                const editorHref =
+                  hasItineraries && lastViewedItineraryId
+                    ? `/editor/${lastViewedItineraryId}`
+                    : item.href;
 
                 if (isDisabled) {
                   return (

@@ -6,9 +6,9 @@ interface MainLayoutProps {
 
 export default function MainLayout({ children }: MainLayoutProps) {
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="h-full flex flex-col bg-slate-50">
       <TopNavigation />
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 overflow-auto">{children}</main>
     </div>
   );
 }

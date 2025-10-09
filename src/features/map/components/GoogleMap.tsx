@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Loader } from "@googlemaps/js-api-loader";
-import Image from "next/image";
 import { MapProps, MapPlace, GoogleMapInstance } from "../types";
 import {
   createNumberedMarkerIcon,
@@ -30,7 +29,6 @@ export const GoogleMap = React.memo(
     data,
     onPlaceClick,
     onMapReady,
-    onRefreshDirections,
     selectedPlace,
     visibleDays,
     routesVisible = true,
@@ -46,7 +44,6 @@ export const GoogleMap = React.memo(
     const [mapContainer, setMapContainer] = useState<HTMLDivElement | null>(
       null
     );
-    const [isRefreshing, setIsRefreshing] = useState(false);
     const [originalBounds, setOriginalBounds] =
       useState<google.maps.LatLngBounds | null>(null);
     const [selectedMarker, setSelectedMarker] =
@@ -517,62 +514,63 @@ export const GoogleMap = React.memo(
             return;
           }
 
-        // Use place-specific color or fallback to day color or default
-        const color =
-          place.color ||
-          (place.dayIndex !== undefined
-            ? getDayColor(place.dayIndex)
-            : getDefaultPlaceColor());
+          // Use place-specific color or fallback to day color or default
+          const color =
+            place.color ||
+            (place.dayIndex !== undefined
+              ? getDayColor(place.dayIndex)
+              : getDefaultPlaceColor());
 
-        // Use place number within day or global index
-        const markerNumber = place.placeNumberInDay || index + 1;
+          // Use place number within day or global index
+          const markerNumber = place.placeNumberInDay || index + 1;
 
-        // Format the marker display based on type
-        let markerDisplay: string;
-        if (place.type === "hotel") {
-          // Convert number to letter: 1->A, 2->B, 3->C, etc.
-          markerDisplay = String.fromCharCode(64 + markerNumber);
-        } else {
-          // Use regular numbers for places
-          markerDisplay = markerNumber.toString();
-        }
-
-        // Ensure coordinates are in the correct LatLngLiteral format
-        const position = {
-          lat: Number(place.coordinates.lat),
-          lng: Number(place.coordinates.lng),
-        };
-
-        const marker = new google.maps.Marker({
-          position,
-          map,
-          title: place.name,
-          icon: {
-            url: createNumberedMarkerIcon(color, markerDisplay),
-            scaledSize: new google.maps.Size(32, 32),
-            anchor: new google.maps.Point(16, 32),
-          },
-          animation: google.maps.Animation.DROP,
-        });
-
-        // Store dayIndex in marker for efficient visibility toggling
-        (marker as any).dayIndex = place.dayIndex;
-        (marker as any).placeUid = place.uid;
-
-        // Add click listener
-        marker.addListener("click", () => {
-          if (onPlaceClick) {
-            onPlaceClick(place);
+          // Format the marker display based on type
+          let markerDisplay: string;
+          if (place.type === "hotel") {
+            // Convert number to letter: 1->A, 2->B, 3->C, etc.
+            markerDisplay = String.fromCharCode(64 + markerNumber);
+          } else {
+            // Use regular numbers for places
+            markerDisplay = markerNumber.toString();
           }
-        });
 
-        markers.push(marker);
-      });
+          // Ensure coordinates are in the correct LatLngLiteral format
+          const position = {
+            lat: Number(place.coordinates.lat),
+            lng: Number(place.coordinates.lng),
+          };
+
+          const marker = new google.maps.Marker({
+            position,
+            map,
+            title: place.name,
+            icon: {
+              url: createNumberedMarkerIcon(color, markerDisplay),
+              scaledSize: new google.maps.Size(32, 32),
+              anchor: new google.maps.Point(16, 32),
+            },
+            animation: google.maps.Animation.DROP,
+          });
+
+          // Store dayIndex in marker for efficient visibility toggling
+          (marker as any).dayIndex = place.dayIndex;
+          (marker as any).placeUid = place.uid;
+
+          // Add click listener
+          marker.addListener("click", () => {
+            if (onPlaceClick) {
+              onPlaceClick(place);
+            }
+          });
+
+          markers.push(marker);
+        });
       } else {
         // Places data hasn't changed, just update marker visibility based on visibleDays
         markers.forEach((marker) => {
           const dayIndex = (marker as any).dayIndex;
-          const shouldBeVisible = dayIndex === undefined || !visibleDays || visibleDays.has(dayIndex);
+          const shouldBeVisible =
+            dayIndex === undefined || !visibleDays || visibleDays.has(dayIndex);
 
           // Only update if visibility changed
           const currentlyVisible = marker.getMap() !== null;
@@ -594,7 +592,9 @@ export const GoogleMap = React.memo(
             !isNaN(place.coordinates.lng) &&
             !place.hideInMap && // Exclude hidden places from bounds
             // Exclude places from hidden days
-            (place.dayIndex === undefined || !visibleDays || visibleDays.has(place.dayIndex))
+            (place.dayIndex === undefined ||
+              !visibleDays ||
+              visibleDays.has(place.dayIndex))
           );
         });
 
@@ -661,7 +661,9 @@ export const GoogleMap = React.memo(
         if (data.directions && data.directions.length > 0 && routesVisible) {
           // Filter directions based on visible days
           const visibleDirections = visibleDays
-            ? data.directions.filter((direction) => visibleDays.has(direction.dayIndex))
+            ? data.directions.filter((direction) =>
+                visibleDays.has(direction.dayIndex)
+              )
             : data.directions;
 
           directionsRendererRef.current.renderDirections(visibleDirections);
@@ -769,20 +771,6 @@ export const GoogleMap = React.memo(
 
     console.log("Rendering map container");
 
-    // Handle refresh button click
-    const handleRefresh = async () => {
-      if (!onRefreshDirections || isRefreshing) return;
-
-      setIsRefreshing(true);
-      try {
-        await onRefreshDirections();
-      } catch (error) {
-        console.error("Error refreshing directions:", error);
-      } finally {
-        setIsRefreshing(false);
-      }
-    };
-
     return (
       <div className={`relative ${className}`}>
         <div ref={setMapRef} className="w-full h-full rounded-lg" />
@@ -878,13 +866,16 @@ export const GoogleMap = React.memo(
       prevProps.selectedPlace?.uid === nextProps.selectedPlace?.uid &&
       prevProps.selectedPlace?.dayIndex === nextProps.selectedPlace?.dayIndex;
     const classNameEqual = prevProps.className === nextProps.className;
-    const routesVisibleEqual = prevProps.routesVisible === nextProps.routesVisible;
+    const routesVisibleEqual =
+      prevProps.routesVisible === nextProps.routesVisible;
 
     // Compare visibleDays Sets
     const visibleDaysEqual =
       prevProps.visibleDays === nextProps.visibleDays ||
       (prevProps.visibleDays?.size === nextProps.visibleDays?.size &&
-        Array.from(prevProps.visibleDays || []).every((day) => nextProps.visibleDays?.has(day)));
+        Array.from(prevProps.visibleDays || []).every((day) =>
+          nextProps.visibleDays?.has(day)
+        ));
 
     const shouldRerender = !(
       placesEqual &&

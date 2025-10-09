@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { GoogleMap } from "./GoogleMap";
 import { MapPlace } from "../types";
 import {
@@ -117,21 +117,15 @@ export function ItineraryMap({
     // DirectionsPolyRenderer is already created by GoogleMap, we just get the reference
   }, []);
 
-  const handleRouteToggle = useCallback(
-    (visible: boolean) => {
-      setRoutesVisible(visible);
-      // The GoogleMap component will handle showing/hiding routes through its own directionsRendererRef
-    },
-    []
-  );
+  const handleRouteToggle = useCallback((visible: boolean) => {
+    setRoutesVisible(visible);
+    // The GoogleMap component will handle showing/hiding routes through its own directionsRendererRef
+  }, []);
 
-  const handleVisibilityChange = useCallback(
-    (newVisibleDays: Set<number>) => {
-      setVisibleDays(newVisibleDays);
-      // The GoogleMap component will handle re-rendering markers and routes through its effects
-    },
-    []
-  );
+  const handleVisibilityChange = useCallback((newVisibleDays: Set<number>) => {
+    setVisibleDays(newVisibleDays);
+    // The GoogleMap component will handle re-rendering markers and routes through its effects
+  }, []);
 
   return (
     <div className={`relative ${className}`}>
