@@ -11,8 +11,23 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function callOpenAI(prompt: string): Promise<string> {
+interface OpenAIOptions {
+  temperature?: number;
+  maxTokens?: number;
+  systemMessage?: string;
+}
+
+export async function callOpenAI(
+  prompt: string,
+  options: OpenAIOptions = {}
+): Promise<string> {
   const startTime = Date.now();
+
+  const {
+    temperature,
+    maxTokens,
+    systemMessage = "You are a professional travel planner. Create detailed, practical descriptions with specific places, realistic timing, and helpful descriptions.",
+  } = options;
 
   try {
     const completionParams: any = {
@@ -20,8 +35,7 @@ export async function callOpenAI(prompt: string): Promise<string> {
       messages: [
         {
           role: "system",
-          content:
-            "You are a professional travel planner. Create detailed, practical descriptions with specific places, realistic timing, and helpful descriptions.",
+          content: systemMessage,
         },
         {
           role: "user",
@@ -29,6 +43,14 @@ export async function callOpenAI(prompt: string): Promise<string> {
         },
       ],
     };
+
+    if (temperature !== undefined) {
+      completionParams.temperature = temperature;
+    }
+
+    if (maxTokens !== undefined) {
+      completionParams.max_tokens = maxTokens;
+    }
 
     const completion = await openai.chat.completions.create(completionParams);
 

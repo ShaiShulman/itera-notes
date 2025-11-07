@@ -90,7 +90,11 @@ export async function generateItineraryStream(
   }
 
   if (MAX_TOKENS !== undefined) {
-    completionParams.max_tokens = MAX_TOKENS;
+    if (MODEL_NAME.startsWith("gpt-4")) {
+      completionParams.max_tokens = MAX_TOKENS;
+    } else {
+      completionParams.max_completion_tokens = MAX_TOKENS;
+    }
   }
 
   try {
@@ -163,10 +167,11 @@ export async function generateItineraryStream(
     // This allows the caller to handle fallback gracefully
     return new ReadableStream({
       start(controller) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown streaming error";
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown streaming error";
         controller.enqueue(`STREAMING_FAILED: ${errorMessage}`);
         controller.close();
-      }
+      },
     });
   }
 }

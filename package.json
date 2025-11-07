@@ -6,7 +6,11 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:wikipedia": "tsx tests/test_wikipedia_extraction.ts",
+    "test:skeleton": "tsx tests/test_skeleton_generation.ts",
+    "test:full": "tsx tests/test_full_itinerary.ts",
+    "test:all": "npm run test:wikipedia && npm run test:skeleton && npm run test:full"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",
@@ -48,6 +52,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.3.4",
     "tailwindcss": "^4",
+    "tsx": "^4.19.2",
     "typescript": "^5"
   }
 }

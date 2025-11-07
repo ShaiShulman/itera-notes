@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useItinerary } from "@/contexts/ItineraryContext";
 import { AuthProtected } from "@/features/auth/components/AuthProtected";
 import {
@@ -9,8 +10,6 @@ import {
   useCreateItineraryForm,
 } from "@/contexts/CreateItineraryContext";
 import { convertItineraryToEditorData } from "./utils/editorConverter";
-import { createStreamingParser } from "@/features/generateLLM/previewParser";
-import type { PreviewLine } from "@/features/generateLLM/types";
 import { useSecureApi } from "@/hooks/useSecureApi";
 import {
   PlusIcon,
@@ -35,35 +34,26 @@ interface FormErrors {
 
 function NewItineraryForm() {
   const router = useRouter();
-  const { state, setEditorData, setDirectionsData, setFormMetadata } = useItinerary();
+  const { state, setEditorData, setDirectionsData, setFormMetadata } =
+    useItinerary();
   const { formData, updateFormData, isFormDirty } = useCreateItineraryForm();
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
   const [newInterest, setNewInterest] = useState("");
-  const [streamingLines, setStreamingLines] = useState<PreviewLine[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingFailedWarning, setStreamingFailedWarning] = useState<string | null>(null);
-  const streamingContainerRef = useRef<HTMLDivElement>(null);
-  const parserRef = useRef(createStreamingParser());
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const { secureStream, error: securityError, clearError, isAuthenticated } = useSecureApi();
+  const { secureStream, error: securityError, clearError } = useSecureApi();
+
+  // Wikipedia enrichment progress
+  const [enrichmentPlaces, setEnrichmentPlaces] = useState<Array<{ name: string; found: boolean }>>([]);
+  const [enrichmentStats, setEnrichmentStats] = useState<{ found: number; total: number } | null>(null);
 
   // Handle cancellation of itinerary generation
   const handleCancel = () => {
-    if (abortControllerRef.current) {
-      console.log("🛑 Cancelling itinerary generation...");
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    
     // Reset all loading states
     setIsLoading(false);
-    setIsStreaming(false);
     setLoadingMessage("");
-    setStreamingLines([]);
-    setStreamingFailedWarning(null);
-    parserRef.current.reset();
+    setEnrichmentPlaces([]);
+    setEnrichmentStats(null);
   };
 
   // Handle form field changes
@@ -72,10 +62,6 @@ function NewItineraryForm() {
     // Clear error for this field
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }));
-    }
-    // Clear security errors when user makes changes
-    if (securityError) {
-      clearError();
     }
   };
 
@@ -116,97 +102,66 @@ function NewItineraryForm() {
     );
   };
 
-  // Handle streaming content with secure API
-  const handleSecureStreaming = async (formData: any, abortSignal: AbortSignal): Promise<string | null> => {
-    let fullContent = "";
-    let streamingFailed = false;
+  // Handle multi-step streaming with progress updates
+  const handleMultiStepStreaming = async (validatedData: any) => {
+    console.log("🚀 Starting multi-step streaming with progress updates");
+    setLoadingMessage("Generating skeleton itinerary...");
+    setEnrichmentPlaces([]);
+    setEnrichmentStats(null);
 
     try {
       await secureStream(
-        "/api/generate-itinerary-stream",
-        formData,
+        "/api/generate-itinerary-multistep-stream",
+        validatedData,
         (chunk: string) => {
-          // Check if cancelled before processing chunk
-          if (abortSignal.aborted) {
-            throw new Error("Operation was cancelled");
-          }
+          // Process progress updates (one JSON per line)
+          const lines = chunk.trim().split("\n");
+          for (const line of lines) {
+            if (!line.trim()) continue;
 
-          // Check if streaming failed
-          if (chunk.startsWith('STREAMING_FAILED:')) {
-            const errorMessage = chunk.replace('STREAMING_FAILED:', '').trim();
-            console.warn("🔄 Streaming failed, showing warning and falling back:", errorMessage);
-            setStreamingFailedWarning(`Streaming encountered an issue: ${errorMessage}. Continuing with standard generation...`);
-            streamingFailed = true;
-            return; // Don't throw, just mark as failed and return
-          }
+            try {
+              const progress = JSON.parse(line);
 
-          fullContent += chunk;
-
-          // Process chunk through preview parser
-          const newLines = parserRef.current.addContent(chunk);
-
-          if (newLines.length > 0) {
-            setStreamingLines(prev => [...prev, ...newLines]);
-
-            // Auto-scroll to bottom of streaming container
-            setTimeout(() => {
-              if (streamingContainerRef.current) {
-                streamingContainerRef.current.scrollTop = streamingContainerRef.current.scrollHeight;
+              // Handle different progress types
+              if (progress.type === "skeleton_generating") {
+                setLoadingMessage("Generating skeleton itinerary...");
+              } else if (progress.type === "skeleton_generated") {
+                setLoadingMessage(`Skeleton generated with ${progress.placesCount} places. Enriching with Wikipedia...`);
+              } else if (progress.type === "place_enriched") {
+                setLoadingMessage(`Enriching ${progress.placeName} with Wikipedia...`);
+                setEnrichmentPlaces((prev) => [
+                  ...prev,
+                  { name: progress.placeName, found: progress.found },
+                ]);
+              } else if (progress.type === "statistics") {
+                setEnrichmentStats({
+                  found: progress.foundCount,
+                  total: progress.totalCount,
+                });
+                setLoadingMessage("Creating final itinerary...");
               }
-            }, 0);
+            } catch (parseError) {
+              console.warn("Failed to parse progress update:", line);
+            }
           }
-        },
-        abortSignal
+        }
       );
 
-      // Check if streaming failed during the process
-      if (streamingFailed) {
-        return null; // Signal that streaming failed and fallback is needed
-      }
+      console.log("✅ Multi-step streaming complete, now calling non-streaming action to get final result");
 
-      // Finalize any remaining content if not cancelled
-      if (!abortSignal.aborted) {
-        const finalLines = parserRef.current.finalize();
-        if (finalLines.length > 0) {
-          setStreamingLines(prev => [...prev, ...finalLines]);
-        }
-      }
-
-      return fullContent;
-    } catch (error) {
-      // Handle other streaming errors (not the STREAMING_FAILED case)
-      if (error instanceof Error && error.message === "Operation was cancelled") {
-        throw error; // Re-throw cancellation errors
-      }
-
-      // For other errors, set a warning and signal fallback
-      console.warn("🔄 Streaming encountered an error, falling back:", error);
-      setStreamingFailedWarning(`Streaming encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Continuing with standard generation...`);
-      return null; // Signal fallback needed
-    }
-  };
-
-  // Fallback to non-streaming generation
-  const handleFallbackGeneration = async (validatedData: any) => {
-    console.log("🔄 Falling back to non-streaming generation");
-    setLoadingMessage("Creating your personalized itinerary (standard mode)...");
-    setIsStreaming(false);
-    setStreamingLines([]);
-
-    // If no warning is set yet, set a generic one
-    if (!streamingFailedWarning) {
-      setStreamingFailedWarning("Streaming mode unavailable. Continuing with standard generation...");
-    }
-
-    try {
-      // Import the original server action as fallback
-      const { generateItineraryAction } = await import("@/features/generateLLM/generateAction");
+      // After streaming completes, call the non-streaming action to get the final result
+      const { generateItineraryAction } = await import(
+        "@/features/generateLLM/generateAction"
+      );
 
       const actionResult = await generateItineraryAction(validatedData);
 
       if (actionResult.success && actionResult.data) {
         // Convert to editor data format
-        const editorData = convertItineraryToEditorData(actionResult.data, true);
+        const editorData = convertItineraryToEditorData(
+          actionResult.data,
+          true
+        );
 
         // Store form metadata in context
         setFormMetadata({
@@ -229,7 +184,7 @@ function NewItineraryForm() {
         // Wait for auto-save
         let attempts = 0;
         const maxAttempts = 20;
-        
+
         while (attempts < maxAttempts && !state.currentItineraryId) {
           await new Promise((resolve) => setTimeout(resolve, 500));
           attempts++;
@@ -238,22 +193,35 @@ function NewItineraryForm() {
         if (state.currentItineraryId) {
           const { generateItinerarySlug } = await import("@/utils/itinerary");
           const title = actionResult.data.title || "New Itinerary";
-          const slug = generateItinerarySlug(title, state.currentItineraryId, editorData);
-          
-          if (typeof window !== 'undefined') {
-            sessionStorage.setItem('fresh-from-create', 'true');
-            sessionStorage.setItem('fresh-from-create-timestamp', Date.now().toString());
-            sessionStorage.setItem('fresh-itinerary-id', state.currentItineraryId);
+          const slug = generateItinerarySlug(
+            title,
+            state.currentItineraryId,
+            editorData
+          );
+
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("fresh-from-create", "true");
+            sessionStorage.setItem(
+              "fresh-from-create-timestamp",
+              Date.now().toString()
+            );
+            sessionStorage.setItem(
+              "fresh-itinerary-id",
+              state.currentItineraryId
+            );
           }
-          
+
           router.push(`/editor/${slug}`);
           return;
         } else {
-          if (typeof window !== 'undefined') {
-            sessionStorage.setItem('fresh-from-create', 'true');
-            sessionStorage.setItem('fresh-from-create-timestamp', Date.now().toString());
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("fresh-from-create", "true");
+            sessionStorage.setItem(
+              "fresh-from-create-timestamp",
+              Date.now().toString()
+            );
           }
-          
+
           router.push("/editor");
           return;
         }
@@ -266,21 +234,10 @@ function NewItineraryForm() {
     }
   };
 
-  // Handle form submission with secure streaming and fallback
+  // Handle form submission with multi-step Wikipedia enrichment
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
-
-    // Check authentication first
-    if (!isAuthenticated) {
-      setErrors({ submit: "Please log in to generate an itinerary." });
-      return;
-    }
-
-    // Clear any previous security errors
-    if (securityError) {
-      clearError();
-    }
 
     // Validate form data
     const result = newItinerarySchema.safeParse(formData);
@@ -296,286 +253,88 @@ function NewItineraryForm() {
     }
 
     try {
-      // Reset streaming state and start streaming
+      // Use multi-step Wikipedia-enriched generation with streaming progress
       setIsLoading(true);
-      setIsStreaming(true);
-      setStreamingLines([]);
-      setLoadingMessage("Creating your personalized itinerary...");
-      parserRef.current.reset();
-      
-      // Create AbortController for cancellation support
-      abortControllerRef.current = new AbortController();
+      setLoadingMessage(
+        "Creating your personalized itinerary with Wikipedia enrichment..."
+      );
 
-      let fullContent = "";
-
-      try {
-        // Import server action dynamically
-        const { processStreamedContent } = await import("@/features/generateLLM/generateAction");
-
-        // Start secure streaming generation with cancel support
-        const streamingResult = await handleSecureStreaming(result.data, abortControllerRef.current.signal);
-
-        // Check if streaming failed and fallback is needed
-        if (streamingResult === null) {
-          console.warn("⚠️ Streaming returned null, falling back to non-streaming generation");
-          await handleFallbackGeneration(result.data);
-          return;
-        }
-
-        fullContent = streamingResult;
-        setLoadingMessage("Processing your itinerary...");
-        setIsStreaming(false);
-
-        // Process the complete content
-        const request = {
-          destination: result.data.destination,
-          startDate: result.data.startDate,
-          endDate: result.data.endDate,
-          interests: result.data.interests,
-          travelStyle: result.data.travelStyle,
-          additionalNotes: result.data.additionalNotes,
-        };
-
-        const generatedItinerary = await processStreamedContent(fullContent, request);
-        
-        setLoadingMessage("Calculating driving routes...");
-
-        // Generate directions
-        let directions: any[] = [];
-        let updatedItinerary = generatedItinerary;
-        
-        try {
-          const { generateDirectionsWithTimes } = await import("@/features/directions/generator");
-          const directionResult = await generateDirectionsWithTimes(generatedItinerary);
-          directions = directionResult.directions;
-          updatedItinerary = directionResult.updatedItinerary;
-        } catch (error) {
-          console.error("⚠️ Failed to generate directions:", error);
-        }
-
-        // Convert to editor data format
-        const editorData = convertItineraryToEditorData(updatedItinerary, true);
-
-        // Store form metadata in context
-        setFormMetadata({
-          destination: result.data.destination,
-          startDate: new Date(result.data.startDate),
-          endDate: new Date(result.data.endDate),
-          interests: result.data.interests,
-          travelStyle: result.data.travelStyle,
-          additionalNotes: result.data.additionalNotes || undefined,
-        });
-
-        setEditorData(editorData);
-
-        if (directions.length > 0) {
-          setDirectionsData(directions);
-        }
-
-        setLoadingMessage("Saving to database and preparing editor...");
-
-        // Wait for auto-save to complete and get the itinerary ID
-        let attempts = 0;
-        const maxAttempts = 20;
-        
-        while (attempts < maxAttempts && !state.currentItineraryId) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          attempts++;
-        }
-
-        if (state.currentItineraryId) {
-          const { generateItinerarySlug } = await import("@/utils/itinerary");
-          const title = updatedItinerary.title || "New Itinerary";
-          const slug = generateItinerarySlug(title, state.currentItineraryId, editorData);
-          
-          if (typeof window !== 'undefined') {
-            sessionStorage.setItem('fresh-from-create', 'true');
-            sessionStorage.setItem('fresh-from-create-timestamp', Date.now().toString());
-            sessionStorage.setItem('fresh-itinerary-id', state.currentItineraryId);
-          }
-          
-          router.push(`/editor/${slug}`);
-          return;
-        } else {
-          if (typeof window !== 'undefined') {
-            sessionStorage.setItem('fresh-from-create', 'true');
-            sessionStorage.setItem('fresh-from-create-timestamp', Date.now().toString());
-          }
-          
-          router.push("/editor");
-          return;
-        }
-      } catch (streamingError) {
-        console.error("Secure streaming generation failed:", streamingError);
-
-        // Check if operation was cancelled
-        if (streamingError instanceof Error && streamingError.message === "Operation was cancelled") {
-          console.log("✅ Itinerary generation was cancelled by user");
-          return; // Exit gracefully, UI already reset by handleCancel
-        }
-
-        // Check if it's a security-related error
-        if (securityError) {
-          let errorMessage = "Security error occurred. ";
-
-          switch (securityError.type) {
-            case "RATE_LIMITED":
-              errorMessage += "You've exceeded the request limit. Please try again later.";
-              break;
-            case "CSRF_INVALID":
-              errorMessage += "Security token expired. Please refresh the page and try again.";
-              break;
-            case "UNAUTHORIZED":
-              errorMessage += "Please log in and try again.";
-              break;
-            default:
-              errorMessage += securityError.message;
-          }
-
-          setErrors({ submit: errorMessage });
-          setIsLoading(false);
-          setIsStreaming(false);
-          setLoadingMessage("");
-          setStreamingLines([]);
-          setStreamingFailedWarning(null);
-          return;
-        }
-
-        // For other errors (not streaming failures), attempt fallback
-        console.warn("⚠️ Unexpected error during streaming, attempting fallback to non-streaming generation");
-        await handleFallbackGeneration(result.data);
-        return;
-      }
+      console.log("🚀 Starting multi-step Wikipedia-enriched generation");
+      await handleMultiStepStreaming(result.data);
+      return;
     } catch (error) {
       console.error("Error generating itinerary:", error);
-      
-      // Check for security errors first
-      if (securityError) {
-        setErrors({ submit: `Security error: ${securityError.message}` });
-      } else {
-        setErrors({ submit: "Failed to generate itinerary. Please try again." });
-      }
-      
+      setErrors({ submit: "Failed to generate itinerary. Please try again." });
+
       setIsLoading(false);
-      setIsStreaming(false);
       setLoadingMessage("");
-      setStreamingLines([]);
-      setStreamingFailedWarning(null);
+      setEnrichmentPlaces([]);
+      setEnrichmentStats(null);
     }
   };
 
   // Get today's date for date input min values
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
 
-  const renderStreamingLine = (line: PreviewLine, index: number) => {
-    switch (line.type) {
-      case "title":
-        return (
-          <div key={index} className="text-xl font-bold text-slate-800 mb-4">
-            {line.cleanedContent}
-          </div>
-        );
-      case "day":
-        return (
-          <div 
-            key={index} 
-            className="bg-slate-600 text-white px-4 py-2 rounded-lg mb-2 font-medium"
-          >
-            Day {line.metadata?.dayNumber} - {line.cleanedContent}
-          </div>
-        );
-      case "place":
-        return (
-          <div 
-            key={index} 
-            className="border-2 border-slate-400 px-3 py-2 rounded-md mb-2 bg-white/80"
-          >
-            <span className="font-medium text-slate-700">
-              {line.cleanedContent}
-            </span>
-            {line.metadata?.coordinates && (
-              <span className="text-xs text-slate-500 ml-2">
-                ({line.metadata.coordinates.lat.toFixed(5)}, {line.metadata.coordinates.lng.toFixed(5)})
-              </span>
-            )}
-          </div>
-        );
-      case "paragraph":
-        return (
-          <div key={index} className="text-slate-600 mb-2 leading-relaxed">
-            {line.cleanedContent}
-          </div>
-        );
-      default:
-        return (
-          <div key={index} className="text-slate-500 mb-1">
-            {line.cleanedContent}
-          </div>
-        );
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 relative">
-        {/* Warning Notification - Fixed position top-right */}
-        {streamingFailedWarning && (
-          <div className="fixed top-4 right-4 z-50 max-w-sm bg-amber-50 border border-amber-200 rounded-lg p-4 shadow-lg">
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-amber-600" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-amber-800 font-medium">Streaming Notice</p>
-                <p className="text-sm text-amber-700 mt-1">{streamingFailedWarning}</p>
-              </div>
-              <button
-                onClick={() => setStreamingFailedWarning(null)}
-                className="ml-4 text-amber-600 hover:text-amber-800"
-              >
-                <span className="sr-only">Dismiss</span>
-                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Streaming Content Background - positioned from top-left */}
-        {isStreaming && streamingLines.length > 0 && (
-          <div className="absolute top-0 left-0 w-full h-full overflow-hidden">
-            <div
-              ref={streamingContainerRef}
-              className="h-full overflow-y-auto p-8 bg-black/5"
-            >
-              <div className="max-w-4xl space-y-1 opacity-70">
-                {streamingLines.map((line, index) => renderStreamingLine(line, index))}
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {/* Loading Overlay - removed backdrop-blur, replaced with partial transparency */}
+        {/* Loading Overlay */}
         <div className="relative z-10 min-h-screen flex flex-col items-center justify-center bg-white/70">
           <div className="text-center bg-white/90 p-8 rounded-2xl shadow-lg border border-white/50">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-100 rounded-full mb-6">
               <SparklesIcon className="h-10 w-10 text-blue-600 animate-pulse" />
             </div>
             <h2 className="text-2xl font-bold text-slate-900 mb-4">
-              {isStreaming ? "Generating Your Itinerary" : "Processing Your Itinerary"}
+              Generating Your Itinerary
             </h2>
             <p className="text-lg text-slate-600 mb-8">{loadingMessage}</p>
             <div className="flex justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             </div>
             <p className="text-sm text-slate-500 mt-4">
-              {isStreaming ? "Watch your itinerary come to life..." : "This may take a few moments..."}
+              This may take a few moments...
             </p>
+
+            {/* Wikipedia Enrichment Progress */}
+            {enrichmentPlaces.length > 0 && (
+              <div className="mt-6 text-left max-w-md mx-auto">
+                <h3 className="text-sm font-medium text-slate-700 mb-3">
+                  Enriching places with Wikipedia:
+                </h3>
+                <div className="max-h-40 overflow-y-auto space-y-1 bg-slate-50 rounded-lg p-3">
+                  {enrichmentPlaces.map((place, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center text-sm"
+                    >
+                      <span className="mr-2">
+                        {place.found ? (
+                          <span className="text-green-600">✓</span>
+                        ) : (
+                          <span className="text-slate-400">○</span>
+                        )}
+                      </span>
+                      <span
+                        className={
+                          place.found ? "text-slate-700" : "text-slate-500"
+                        }
+                      >
+                        {place.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {enrichmentStats && (
+                  <p className="text-xs text-slate-600 mt-2 text-center">
+                    Found Wikipedia articles for {enrichmentStats.found} of{" "}
+                    {enrichmentStats.total} places
+                  </p>
+                )}
+              </div>
+            )}
           </div>
-          
+
           {/* Cancel Button */}
           <div className="mt-8">
             <button
@@ -830,8 +589,8 @@ function NewItineraryForm() {
                       formData.transportPreference === option.value
                         ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500"
                         : errors.transportPreference
-                          ? "border-red-500"
-                          : "border-slate-300"
+                        ? "border-red-500"
+                        : "border-slate-300"
                     }`}
                   >
                     <input
@@ -847,15 +606,17 @@ function NewItineraryForm() {
                     <div className="flex items-start gap-3">
                       <div className="mt-1 flex-shrink-0">
                         {option.iconPath ? (
-                          <img
+                          <Image
                             src={option.iconPath}
                             alt={`${option.label} icon`}
-                            width="18"
-                            height="18"
+                            width={18}
+                            height={18}
                             className="w-[18px] h-[18px]"
                           />
                         ) : (
-                          <div dangerouslySetInnerHTML={{ __html: option.icon }} />
+                          <div
+                            dangerouslySetInnerHTML={{ __html: option.icon }}
+                          />
                         )}
                       </div>
                       <div className="flex-1">
@@ -869,8 +630,16 @@ function NewItineraryForm() {
                     </div>
                     {formData.transportPreference === option.value && (
                       <div className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-blue-500">
-                        <svg className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        <svg
+                          className="h-3 w-3 text-white"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                            clipRule="evenodd"
+                          />
                         </svg>
                       </div>
                     )}

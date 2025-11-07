@@ -19,7 +19,102 @@ export interface ItineraryGenerationResult {
   error?: string;
 }
 
-// Streaming response for real-time display
+// Streaming response for multi-step generation with progress updates
+export async function generateItineraryMultiStepStreamAction(
+  formData: NewItineraryForm,
+  httpRequest?: Request
+): Promise<Response> {
+  try {
+    // Validate the form data using Zod schema
+    const validationResult = newItinerarySchema.safeParse(formData);
+
+    if (!validationResult.success) {
+      const errors = validationResult.error.errors
+        .map((err) => err.message)
+        .join(", ");
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `Validation failed: ${errors}`,
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+    }
+
+    const {
+      destination,
+      startDate,
+      endDate,
+      interests,
+      travelStyle,
+      transportPreference,
+      additionalNotes,
+    } = validationResult.data;
+
+    console.log("🚀 Starting multi-step streaming generation with progress...");
+
+    // Create a TransformStream for streaming progress updates
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+
+    // Start the multi-step generation process
+    (async () => {
+      try {
+        const { generateItineraryMultiStep } = await import("./multiStepGeneration");
+
+        // Generate with progress writer
+        await generateItineraryMultiStep({
+          destination,
+          startDate,
+          endDate,
+          interests,
+          travelStyle,
+          transportPreference,
+          additionalNotes,
+          progressWriter: writer,
+        });
+
+        console.log("✅ Multi-step streaming generation complete");
+      } catch (error) {
+        console.error("❌ Multi-step streaming error:", error);
+        if (error instanceof Error && !error.message.includes("aborted")) {
+          const encoder = new TextEncoder();
+          await writer.write(encoder.encode(`STREAMING_FAILED: ${error.message}`));
+        }
+      } finally {
+        await writer.close();
+      }
+    })();
+
+    // Return streaming response
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Transfer-Encoding": "chunked",
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error in generateItineraryMultiStepStreamAction:", error);
+
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: `Failed to generate streaming itinerary: ${error instanceof Error ? error.message : "Unknown error"}`,
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+  }
+}
+
+// Streaming response for real-time display (legacy)
 export async function generateItineraryStreamAction(
   formData: NewItineraryForm,
   httpRequest?: Request
@@ -168,8 +263,12 @@ export async function generateItineraryAction(
       additionalNotes,
     } = validationResult.data;
 
-    // Prepare the request for OpenAI service
-    const request: ItineraryGenerationRequest = {
+    console.log("🚀 Starting multi-step Wikipedia-enriched generation...");
+
+    // Use multi-step generation with Wikipedia enrichment
+    const { generateItineraryMultiStep } = await import("./multiStepGeneration");
+
+    const generatedItinerary = await generateItineraryMultiStep({
       destination,
       startDate,
       endDate,
@@ -177,10 +276,9 @@ export async function generateItineraryAction(
       travelStyle,
       transportPreference,
       additionalNotes,
-    };
+    });
 
-    // Generate the itinerary using OpenAI
-    const generatedItinerary = await generateItinerary(request);
+    console.log("✅ Multi-step generation complete");
 
     // Generate directions for the itinerary and update driving times
     let directions: DirectionsData[] = [];

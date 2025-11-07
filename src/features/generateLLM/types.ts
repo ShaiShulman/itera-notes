@@ -56,3 +56,42 @@ export interface PreviewLine {
     transportMode?: string;
   };
 }
+
+// Skeleton generation types (Step 1)
+export interface SkeletonPlace {
+  name: string;
+  lat: number;
+  lng: number;
+  description: string; // Brief description from skeleton
+  activities: string;
+  time: string; // How long to spend
+  transit?: string; // How to get to next place
+  interestingFacts?: string[]; // 2 facts from skeleton generation
+}
+
+export interface SkeletonDay {
+  dayNumber: number;
+  date: string;
+  title: string;
+  transportMode: string;
+  places: SkeletonPlace[];
+}
+
+export interface SkeletonItinerary {
+  title: string;
+  destination: string;
+  totalDays: number;
+  days: SkeletonDay[];
+}
+
+// Enrichment progress types
+export interface EnrichmentProgress {
+  type: "skeleton_generating" | "skeleton_generated" | "place_enriching" | "place_enriched" | "statistics";
+  placeName?: string;
+  found?: boolean;
+  index?: number;
+  total?: number;
+  foundCount?: number;
+  totalCount?: number;
+  placesCount?: number;
+}
